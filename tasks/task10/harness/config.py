@@ -1,0 +1,20 @@
+"""Verifier-only seeds, scoring thresholds and gates."""
+
+EVAL_SEEDS = (8053, 17749, 29009, 44101, 60647, 77587, 91873, 104729)
+SCENARIOS = ("free_space", "contact", "recovery")
+GATE_CAP = 0.10
+MAX_ACTION_FAULTS = 3
+JOINT_LIMIT_MARGIN = 0.025
+MAX_CONTACT_FORCE_N = 42.0
+MAX_POSITION_RMSE_M = 0.16
+TRACK_EXCELLENT_M = 0.018
+CONTACT_FORCE_EXCELLENT_N = 2.5
+CONTACT_FORCE_FAIL_N = 16.0
+RECOVERY_EXCELLENT_S = 0.35
+RECOVERY_FAIL_S = 2.4
+
+WEIGHTS = {
+    "free_space": 0.40,
+    "contact": 0.35,
+    "recovery": 0.25,
+}

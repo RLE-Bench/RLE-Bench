@@ -1,0 +1,36 @@
+schema_version = "1.4"
+artifacts = ["/logs/artifacts/controller.py"]
+
+[task]
+name = "rlebench/task10-fault-adaptive-arm-control"
+version = "1.0.0"
+description = "Identify coupled actuator faults and ship a safe adaptive controller for Cartesian tracking, compliant contact and disturbance recovery on a torque-controlled Panda."
+authors = [{ name = "Jiankai Sun" }]
+keywords = ["robotics", "mujoco", "system-identification", "adaptive-control", "contact"]
+
+[metadata]
+category = "robotics-control"
+difficulty = "hard"
+tags = ["hidden-faults", "cartesian-control", "contact", "cpu", "custom-verifier"]
+difficulty_explanation = "A short metered calibration window must identify encoder offset, coupled actuator response and delay; evaluation combines held-out payloads, compliant contact, an impulse and a second actuator derating. Fixed nominal control is intentionally insufficient while an observation-only reference controller remains viable."
+
+[environment]
+docker_image = "rlebench-task10-agent:dev"
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 4096
+network_mode = "no-network"
+
+[agent]
+timeout_sec = 7200.0
+
+[verifier]
+timeout_sec = 3600.0
+network_mode = "no-network"
+environment_mode = "separate"
+
+[verifier.environment]
+docker_image = "rlebench-task10-verifier:dev"
+cpus = 4
+memory_mb = 4096
+network_mode = "no-network"

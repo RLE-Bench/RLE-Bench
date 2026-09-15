@@ -1,0 +1,275 @@
+{
+  "reward": 0.7575569956998669,
+  "bands": {
+    "free_space": 0.9104965672755243,
+    "contact": 0.543991234967682,
+    "recovery": 0.8118457462038736
+  },
+  "episodes": [
+    {
+      "seed": 8053,
+      "scenario": "free_space",
+      "score": 1.0,
+      "position_rmse": 0.012251327719963167,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 17749,
+      "scenario": "free_space",
+      "score": 0.9395699022033814,
+      "position_rmse": 0.026581073887119836,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 29009,
+      "scenario": "free_space",
+      "score": 0.8028548237163395,
+      "position_rmse": 0.045994615032279786,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 44101,
+      "scenario": "free_space",
+      "score": 0.9474349283244662,
+      "position_rmse": 0.025464240177925774,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 60647,
+      "scenario": "free_space",
+      "score": 0.8749473426380389,
+      "position_rmse": 0.035757477345398476,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 77587,
+      "scenario": "free_space",
+      "score": 0.9023684294926148,
+      "position_rmse": 0.031863683012048706,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 91873,
+      "scenario": "free_space",
+      "score": 0.8738040275678213,
+      "position_rmse": 0.03591982808536937,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 104729,
+      "scenario": "free_space",
+      "score": 0.9429930842615326,
+      "position_rmse": 0.02609498203486234,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 8053,
+      "scenario": "contact",
+      "score": 0.3580723948763983,
+      "position_rmse": 0.05655991940422378,
+      "force_rmse": 17.575151161646872,
+      "peak_force": 35.621008369741425,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 17749,
+      "scenario": "contact",
+      "score": 0.685930146693736,
+      "position_rmse": 0.05561027753125927,
+      "force_rmse": 8.773958481238955,
+      "peak_force": 17.092311348282745,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 29009,
+      "scenario": "contact",
+      "score": 0.729971022176423,
+      "position_rmse": 0.06255592424767867,
+      "force_rmse": 6.393621226023527,
+      "peak_force": 12.555624253963984,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 44101,
+      "scenario": "contact",
+      "score": 0.5885779044746595,
+      "position_rmse": 0.06078213152224837,
+      "force_rmse": 10.757667308775776,
+      "peak_force": 21.016401978655807,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 60647,
+      "scenario": "contact",
+      "score": 0.6363348332492521,
+      "position_rmse": 0.06006921454489795,
+      "force_rmse": 9.873901107493356,
+      "peak_force": 17.757283868576273,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 77587,
+      "scenario": "contact",
+      "score": 0.0,
+      "position_rmse": 0.06448908478464802,
+      "force_rmse": 8.450044378581458,
+      "peak_force": 6.79143227933763e-12,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 91873,
+      "scenario": "contact",
+      "score": 0.7775384308767902,
+      "position_rmse": 0.07134943680365922,
+      "force_rmse": 3.6564290472678707,
+      "peak_force": 8.850629881007041,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 104729,
+      "scenario": "contact",
+      "score": 0.5755051473941968,
+      "position_rmse": 0.06060155034529851,
+      "force_rmse": 11.096092475954316,
+      "peak_force": 21.613842258713095,
+      "recovery_seconds": 2.4,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 8053,
+      "scenario": "recovery",
+      "score": 0.7928655944045151,
+      "position_rmse": 0.07147833744465248,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.0,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 17749,
+      "scenario": "recovery",
+      "score": 0.7583848108873267,
+      "position_rmse": 0.08038064882545384,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.12,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 29009,
+      "scenario": "recovery",
+      "score": 0.8542194052597609,
+      "position_rmse": 0.05563789900566173,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.0,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 44101,
+      "scenario": "recovery",
+      "score": 0.8402151662646339,
+      "position_rmse": 0.058120057738683,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.37,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 60647,
+      "scenario": "recovery",
+      "score": 0.4921511265800014,
+      "position_rmse": 0.14118297743020986,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.49,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 77587,
+      "scenario": "recovery",
+      "score": 0.9362927851675232,
+      "position_rmse": 0.03274782282725855,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.38,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 91873,
+      "scenario": "recovery",
+      "score": 0.8532681779828803,
+      "position_rmse": 0.051916304558034206,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.42,
+      "unsafe": false,
+      "action_faults": 0
+    },
+    {
+      "seed": 104729,
+      "scenario": "recovery",
+      "score": 0.9673689030843475,
+      "position_rmse": 0.026424755930950252,
+      "force_rmse": 0.0,
+      "peak_force": 0.0,
+      "recovery_seconds": 0.0,
+      "unsafe": false,
+      "action_faults": 0
+    }
+  ],
+  "load_failures": 0
+}
