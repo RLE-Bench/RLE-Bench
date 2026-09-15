@@ -1,7 +1,7 @@
 # Host-side pytest modules owned by each Harbor task family.
 # Cross-cutting tests run once through `make test-host`.
 
-TASK_IDS := task01 task02 task03 task04 task05 task06 rgb-only rgb-depth rgb-depth-model-training method-agnostic task07 task08 task09
+TASK_IDS := task01 task02 task03 task04 task05 task06 rgb-only rgb-depth rgb-depth-model-training method-agnostic task07 task08 task09 task10
 
 HOST_TESTS := tests/test_task_images.py tests/test_rlebench_argv.py tests/test_rlebench_lint.py \
 	tests/test_rlebench_summarize.py tests/test_antigravity_agents.py \
@@ -30,6 +30,7 @@ TASK_TESTS_task07 := $(wildcard tests/test_binclear_*.py)
 TASK_TESTS_task08 := $(wildcard tests/test_base_design_*.py)
 
 TASK_TESTS_task09 := $(wildcard tests/test_gello_*.py)
+TASK_TESTS_task10 := tests/test_task10.py
 
 # The families whose mujoco pin needs its own venv; the rest run on PY.
 PY_task04 := .venv-motiontrack/bin/python
@@ -45,3 +46,6 @@ TASK_METRICS_task08 := tests/test_base_design_metrics.py
 TASK_GOLDEN_task08  := tests/test_base_design_golden.py
 TASK_METRICS_task09 := tests/test_gello_metrics.py tests/test_gello_codesign_metrics.py tests/test_gello_scoring.py
 TASK_GOLDEN_task09  := tests/test_gello_codesign_golden.py tests/test_gello_packaging.py tests/test_gello_codesign_tiers.py
+
+TASK_METRICS_task10 := tests/test_task10.py
+TASK_GOLDEN_task10 := tests/test_task10.py

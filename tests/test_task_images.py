@@ -15,6 +15,7 @@ _PIN_DOCKERFILES = sorted(
     for pattern in (
         "tasks/task08/*/Dockerfile",
         "tasks/task09/*/Dockerfile",
+        "tasks/task10/*/Dockerfile",
         "tasks/task07/*/Dockerfile",
         "tasks/task06/*/*/Dockerfile",
     )

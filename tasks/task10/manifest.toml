@@ -1,0 +1,13 @@
+[task]
+layout = "single"
+
+[prepare]
+commands = [["make", "task10"]]
+
+[verify]
+images = ["rlebench-task10-agent:dev", "rlebench-task10-verifier:dev"]
+paths = ["tasks/task10/environment/assets", "tasks/task10/tests/harness", "tasks/task10/solution/payload"]
+
+[run]
+lane = "environment-host"
+gpu = false

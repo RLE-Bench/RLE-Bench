@@ -1,0 +1,920 @@
+{
+  "config": {
+    "gate": {
+      "adaptive_mean_max": 0.72,
+      "adaptive_mean_min": 0.45,
+      "nominal_mean_max": 0.45,
+      "oracle_adaptive_gap_min": 0.25,
+      "oracle_mean_min": 0.9,
+      "oracle_min_min": 0.85
+    },
+    "horizon": 600,
+    "seeds": 24
+  },
+  "difficulty_checks": {
+    "adaptive_has_signal": true,
+    "adaptive_not_solved": true,
+    "identification_gap": true,
+    "nominal_is_hard": true,
+    "oracle_is_safe": true,
+    "oracle_is_solvable": true,
+    "oracle_tail_is_solvable": true
+  },
+  "difficulty_gate_passed": true,
+  "results": [
+    {
+      "controller": "nominal",
+      "effort": 0.6596478951169633,
+      "limit_violation": false,
+      "peak_error": 0.20233929768716943,
+      "rmse": 0.14423357156522723,
+      "score": 0.3770070143318643,
+      "seed": 0
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.47947352451349823,
+      "limit_violation": false,
+      "peak_error": 0.6617582651387982,
+      "rmse": 0.3778160723362619,
+      "score": 0.07122810566366708,
+      "seed": 1
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.12960285138010208,
+      "limit_violation": false,
+      "peak_error": 0.07660319815474065,
+      "rmse": 0.061607486101431984,
+      "score": 0.8464847357036723,
+      "seed": 2
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.206029965825384,
+      "limit_violation": false,
+      "peak_error": 0.743593740950051,
+      "rmse": 0.4993562160921273,
+      "score": 0.1,
+      "seed": 3
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.1632885398727257,
+      "limit_violation": false,
+      "peak_error": 0.1202183715788811,
+      "rmse": 0.10558951264383991,
+      "score": 0.6619003137230882,
+      "seed": 4
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.1157282127557036,
+      "limit_violation": false,
+      "peak_error": 0.1377471085544172,
+      "rmse": 0.11981027114856893,
+      "score": 0.5907328110325943,
+      "seed": 5
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.5853584940915705,
+      "limit_violation": false,
+      "peak_error": 0.15750925346561603,
+      "rmse": 0.11251063844647864,
+      "score": 0.5560408752751508,
+      "seed": 6
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.7075392194138327,
+      "limit_violation": false,
+      "peak_error": 0.2542570067221189,
+      "rmse": 0.18996852709985204,
+      "score": 0.18221986202360224,
+      "seed": 7
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.3906854333386038,
+      "limit_violation": false,
+      "peak_error": 0.1137256603492502,
+      "rmse": 0.07989238965562494,
+      "score": 0.7607649004871878,
+      "seed": 8
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.7056132250161953,
+      "limit_violation": false,
+      "peak_error": 0.2786436491555639,
+      "rmse": 0.20250500121548393,
+      "score": 0.16660401707241898,
+      "seed": 9
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.7175916789949501,
+      "limit_violation": false,
+      "peak_error": 0.2507556415966808,
+      "rmse": 0.14767553224082872,
+      "score": 0.3178437314397099,
+      "seed": 10
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.14386384284074752,
+      "limit_violation": false,
+      "peak_error": 0.1457006606129814,
+      "rmse": 0.1136126718391728,
+      "score": 0.6114901435818555,
+      "seed": 11
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.12498413819758174,
+      "limit_violation": false,
+      "peak_error": 0.12813328926262127,
+      "rmse": 0.11672583461311808,
+      "score": 0.6099924260039602,
+      "seed": 12
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.09915454547799488,
+      "limit_violation": false,
+      "peak_error": 0.1577520417772998,
+      "rmse": 0.12554593371859704,
+      "score": 0.5535188922349094,
+      "seed": 13
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6647162145002597,
+      "limit_violation": false,
+      "peak_error": 0.17101525161607423,
+      "rmse": 0.10658413088328439,
+      "score": 0.5543733974292063,
+      "seed": 14
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6348543871764747,
+      "limit_violation": false,
+      "peak_error": 0.254653089220531,
+      "rmse": 0.1990706851396844,
+      "score": 0.19811146637417676,
+      "seed": 15
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.710048301213095,
+      "limit_violation": false,
+      "peak_error": 0.2619075395635096,
+      "rmse": 0.16794976328065225,
+      "score": 0.22716229375859928,
+      "seed": 16
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6586685065355006,
+      "limit_violation": false,
+      "peak_error": 0.18929385265570026,
+      "rmse": 0.1222410108427181,
+      "score": 0.47803405341082855,
+      "seed": 17
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6485731405116895,
+      "limit_violation": false,
+      "peak_error": 0.20624836387703,
+      "rmse": 0.15651947838356278,
+      "score": 0.325374772116485,
+      "seed": 18
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6461907232289813,
+      "limit_violation": false,
+      "peak_error": 0.214680148766469,
+      "rmse": 0.13921858798664463,
+      "score": 0.39290909229769644,
+      "seed": 19
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.6811751168444441,
+      "limit_violation": false,
+      "peak_error": 0.27602940107226226,
+      "rmse": 0.13563597974405361,
+      "score": 0.3597972734215088,
+      "seed": 20
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.13649067981992882,
+      "limit_violation": false,
+      "peak_error": 0.09974808108117232,
+      "rmse": 0.05803215321151871,
+      "score": 0.8614780671775022,
+      "seed": 21
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.7403576679319384,
+      "limit_violation": false,
+      "peak_error": 0.2628962318669875,
+      "rmse": 0.17534800250786248,
+      "score": 0.1887515492907517,
+      "seed": 22
+    },
+    {
+      "controller": "nominal",
+      "effort": 0.1768128884298568,
+      "limit_violation": false,
+      "peak_error": 0.42354945104609343,
+      "rmse": 0.25659379100569174,
+      "score": 0.15029641378546485,
+      "seed": 23
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7273281097284162,
+      "limit_violation": false,
+      "peak_error": 0.22852766772289837,
+      "rmse": 0.16709273114850373,
+      "score": 0.24887678402661378,
+      "seed": 0
+    },
+    {
+      "controller": "robust",
+      "effort": 0.6760195135967073,
+      "limit_violation": false,
+      "peak_error": 0.6801254181598897,
+      "rmse": 0.348059905592356,
+      "score": 0.02755121920073172,
+      "seed": 1
+    },
+    {
+      "controller": "robust",
+      "effort": 0.4802331333602834,
+      "limit_violation": false,
+      "peak_error": 0.09513608659567925,
+      "rmse": 0.07660711107769604,
+      "score": 0.7546423862751186,
+      "seed": 2
+    },
+    {
+      "controller": "robust",
+      "effort": 0.47613376943002383,
+      "limit_violation": false,
+      "peak_error": 0.7408438644162775,
+      "rmse": 0.48981259081660516,
+      "score": 0.07197027345999472,
+      "seed": 3
+    },
+    {
+      "controller": "robust",
+      "effort": 0.6900135523144308,
+      "limit_violation": false,
+      "peak_error": 0.12612964463445986,
+      "rmse": 0.09765608840734272,
+      "score": 0.615721949521919,
+      "seed": 4
+    },
+    {
+      "controller": "robust",
+      "effort": 0.3508274537444798,
+      "limit_violation": false,
+      "peak_error": 0.12732680741505023,
+      "rmse": 0.11512608873632604,
+      "score": 0.6170477392983376,
+      "seed": 5
+    },
+    {
+      "controller": "robust",
+      "effort": 0.6870186926306463,
+      "limit_violation": false,
+      "peak_error": 0.15314574738733,
+      "rmse": 0.10627082550821025,
+      "score": 0.5624874052103888,
+      "seed": 6
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7954459894061036,
+      "limit_violation": false,
+      "peak_error": 0.27772923183042664,
+      "rmse": 0.20707281635774488,
+      "score": 0.14724277088681326,
+      "seed": 7
+    },
+    {
+      "controller": "robust",
+      "effort": 0.6902887138295745,
+      "limit_violation": false,
+      "peak_error": 0.12093355765855585,
+      "rmse": 0.0895014336280551,
+      "score": 0.6532762201891875,
+      "seed": 8
+    },
+    {
+      "controller": "robust",
+      "effort": 0.8408047656217306,
+      "limit_violation": false,
+      "peak_error": 0.3232337273292477,
+      "rmse": 0.2605193891148503,
+      "score": 0.1162936004412844,
+      "seed": 9
+    },
+    {
+      "controller": "robust",
+      "effort": 0.8356877785901805,
+      "limit_violation": false,
+      "peak_error": 0.25008291204024924,
+      "rmse": 0.17121439958690698,
+      "score": 0.20126197725762845,
+      "seed": 10
+    },
+    {
+      "controller": "robust",
+      "effort": 0.3630503171920012,
+      "limit_violation": false,
+      "peak_error": 0.12283414690131912,
+      "rmse": 0.09756960845325108,
+      "score": 0.6909111947016978,
+      "seed": 11
+    },
+    {
+      "controller": "robust",
+      "effort": 0.3083017981969798,
+      "limit_violation": false,
+      "peak_error": 0.1265216665236124,
+      "rmse": 0.11643579043094812,
+      "score": 0.6122690184340548,
+      "seed": 12
+    },
+    {
+      "controller": "robust",
+      "effort": 0.500119277401006,
+      "limit_violation": false,
+      "peak_error": 0.18381359728586188,
+      "rmse": 0.13948719799044482,
+      "score": 0.4445499263081651,
+      "seed": 13
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7851859346880009,
+      "limit_violation": false,
+      "peak_error": 0.18517305158001213,
+      "rmse": 0.1344004790651041,
+      "score": 0.4016388043642668,
+      "seed": 14
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7075323877344968,
+      "limit_violation": false,
+      "peak_error": 0.235373363628771,
+      "rmse": 0.18159788888671144,
+      "score": 0.1946448295780841,
+      "seed": 15
+    },
+    {
+      "controller": "robust",
+      "effort": 0.8128444925008879,
+      "limit_violation": false,
+      "peak_error": 0.31223377615319403,
+      "rmse": 0.22819001099898215,
+      "score": 0.12353041042553024,
+      "seed": 16
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7691006300571569,
+      "limit_violation": false,
+      "peak_error": 0.19898403900996028,
+      "rmse": 0.14589129551670924,
+      "score": 0.34793984576664516,
+      "seed": 17
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7405528592629401,
+      "limit_violation": false,
+      "peak_error": 0.22292764644157062,
+      "rmse": 0.17319255685364526,
+      "score": 0.22404226107654115,
+      "seed": 18
+    },
+    {
+      "controller": "robust",
+      "effort": 0.7164821874356655,
+      "limit_violation": false,
+      "peak_error": 0.2034698939589126,
+      "rmse": 0.15322105131451977,
+      "score": 0.3259439270509911,
+      "seed": 19
+    },
+    {
+      "controller": "robust",
+      "effort": 0.8278409427506546,
+      "limit_violation": false,
+      "peak_error": 0.2659597489637822,
+      "rmse": 0.1993436229256124,
+      "score": 0.15397384936593275,
+      "seed": 20
+    },
+    {
+      "controller": "robust",
+      "effort": 0.6195455167325398,
+      "limit_violation": false,
+      "peak_error": 0.09223004360868632,
+      "rmse": 0.07282201896264717,
+      "score": 0.7395570457931374,
+      "seed": 21
+    },
+    {
+      "controller": "robust",
+      "effort": 0.8325833395335152,
+      "limit_violation": false,
+      "peak_error": 0.27485935893558544,
+      "rmse": 0.215764602588529,
+      "score": 0.1481188428055359,
+      "seed": 22
+    },
+    {
+      "controller": "robust",
+      "effort": 0.5587223093685663,
+      "limit_violation": false,
+      "peak_error": 0.22174830814670463,
+      "rmse": 0.16431221853934744,
+      "score": 0.30246505881390356,
+      "seed": 23
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6813214011590932,
+      "limit_violation": false,
+      "peak_error": 0.1716668023953816,
+      "rmse": 0.09851156985737636,
+      "score": 0.5841073793909108,
+      "seed": 0
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.65740925829618,
+      "limit_violation": false,
+      "peak_error": 0.14232150865750112,
+      "rmse": 0.09227882870519788,
+      "score": 0.6348646048231497,
+      "seed": 1
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.26700704077914894,
+      "limit_violation": false,
+      "peak_error": 0.05728454117887688,
+      "rmse": 0.024547582877486852,
+      "score": 1.0,
+      "seed": 2
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.32114902759329855,
+      "limit_violation": false,
+      "peak_error": 0.742146750987335,
+      "rmse": 0.4093545412885338,
+      "score": 0.1,
+      "seed": 3
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.26250170558422115,
+      "limit_violation": false,
+      "peak_error": 0.07968713846769097,
+      "rmse": 0.04384892781345183,
+      "score": 0.9209561091693954,
+      "seed": 4
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.4152860559872972,
+      "limit_violation": false,
+      "peak_error": 0.06874207805024847,
+      "rmse": 0.0419314331727745,
+      "score": 0.914489203285453,
+      "seed": 5
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6105203977239584,
+      "limit_violation": false,
+      "peak_error": 0.109003660402018,
+      "rmse": 0.056041775475213884,
+      "score": 0.8119313908068614,
+      "seed": 6
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7458129894763739,
+      "limit_violation": false,
+      "peak_error": 0.21999678766364855,
+      "rmse": 0.1551490463211254,
+      "score": 0.3004678743069685,
+      "seed": 7
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.5815190706968281,
+      "limit_violation": false,
+      "peak_error": 0.09417281510311933,
+      "rmse": 0.036138176653117804,
+      "score": 0.9018428348840459,
+      "seed": 8
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7717426270390507,
+      "limit_violation": false,
+      "peak_error": 0.2790997410891727,
+      "rmse": 0.1608882804408611,
+      "score": 0.23175445464990876,
+      "seed": 9
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7705196494713031,
+      "limit_violation": false,
+      "peak_error": 0.2955036808090464,
+      "rmse": 0.15821820811511408,
+      "score": 0.2324312393326296,
+      "seed": 10
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.14006927792015167,
+      "limit_violation": false,
+      "peak_error": 0.053748526160625004,
+      "rmse": 0.029686816042508068,
+      "score": 0.9803456101443211,
+      "seed": 11
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.14359922117397916,
+      "limit_violation": false,
+      "peak_error": 0.06574761122579906,
+      "rmse": 0.03623353398425094,
+      "score": 0.9528916316789476,
+      "seed": 12
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.1122939206364949,
+      "limit_violation": false,
+      "peak_error": 0.04436737544902749,
+      "rmse": 0.016201666695810166,
+      "score": 1.0,
+      "seed": 13
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6684428837177218,
+      "limit_violation": false,
+      "peak_error": 0.1854774166808317,
+      "rmse": 0.0882921922672712,
+      "score": 0.6207387961148245,
+      "seed": 14
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6489762745502858,
+      "limit_violation": false,
+      "peak_error": 0.10988365995713543,
+      "rmse": 0.0664018611988002,
+      "score": 0.7599401196246812,
+      "seed": 15
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7500385879854995,
+      "limit_violation": false,
+      "peak_error": 0.24371670210806523,
+      "rmse": 0.15434562629862972,
+      "score": 0.28729282628422287,
+      "seed": 16
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7049245836154292,
+      "limit_violation": false,
+      "peak_error": 0.17531383746238904,
+      "rmse": 0.10927779056202062,
+      "score": 0.5313141950871956,
+      "seed": 17
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6895828661425618,
+      "limit_violation": false,
+      "peak_error": 0.2005777082343294,
+      "rmse": 0.10253011026113007,
+      "score": 0.5463992218660473,
+      "seed": 18
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.6840117666105766,
+      "limit_violation": false,
+      "peak_error": 0.15211994020146882,
+      "rmse": 0.08370154006220538,
+      "score": 0.6584758747212399,
+      "seed": 19
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.735002103420322,
+      "limit_violation": false,
+      "peak_error": 0.24570787256367485,
+      "rmse": 0.14616656559238853,
+      "score": 0.32362357356843,
+      "seed": 20
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.2504547359459531,
+      "limit_violation": false,
+      "peak_error": 0.06918336073363006,
+      "rmse": 0.026611945610970217,
+      "score": 0.9932402280830281,
+      "seed": 21
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.7654423772119531,
+      "limit_violation": false,
+      "peak_error": 0.20965806877678406,
+      "rmse": 0.13693360897315374,
+      "score": 0.3792948947957135,
+      "seed": 22
+    },
+    {
+      "controller": "adaptive",
+      "effort": 0.15753713773759365,
+      "limit_violation": false,
+      "peak_error": 0.11098172529486174,
+      "rmse": 0.060766702811536115,
+      "score": 0.850010601112913,
+      "seed": 23
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.13326495785483228,
+      "limit_violation": false,
+      "peak_error": 0.17341152518693917,
+      "rmse": 0.031392908168245894,
+      "score": 0.9380518689549978,
+      "seed": 0
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1761626994258547,
+      "limit_violation": false,
+      "peak_error": 0.10056983996207962,
+      "rmse": 0.01843634770277046,
+      "score": 1.0,
+      "seed": 1
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1349375671932965,
+      "limit_violation": false,
+      "peak_error": 0.0629161569079047,
+      "rmse": 0.012643804670060764,
+      "score": 1.0,
+      "seed": 2
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1809391414172082,
+      "limit_violation": false,
+      "peak_error": 0.04649860092049751,
+      "rmse": 0.014921862224666732,
+      "score": 1.0,
+      "seed": 3
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.16271880975998707,
+      "limit_violation": false,
+      "peak_error": 0.03727290679003577,
+      "rmse": 0.01104615573894369,
+      "score": 1.0,
+      "seed": 4
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.12756706140251212,
+      "limit_violation": false,
+      "peak_error": 0.03309116886429848,
+      "rmse": 0.008628611002301768,
+      "score": 1.0,
+      "seed": 5
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.158702066411364,
+      "limit_violation": false,
+      "peak_error": 0.10043460042289187,
+      "rmse": 0.020093893865822415,
+      "score": 1.0,
+      "seed": 6
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.13303860959769023,
+      "limit_violation": false,
+      "peak_error": 0.08481709946926168,
+      "rmse": 0.019551099195614492,
+      "score": 1.0,
+      "seed": 7
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.11233155827376462,
+      "limit_violation": false,
+      "peak_error": 0.12121454531969805,
+      "rmse": 0.022153503600423615,
+      "score": 0.9992009570265145,
+      "seed": 8
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.12544982549620198,
+      "limit_violation": false,
+      "peak_error": 0.059198992338698214,
+      "rmse": 0.013871269394900843,
+      "score": 1.0,
+      "seed": 9
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.14023176651330474,
+      "limit_violation": false,
+      "peak_error": 0.14847611259217863,
+      "rmse": 0.027459341579007264,
+      "score": 0.9709523474879166,
+      "seed": 10
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1366294325324465,
+      "limit_violation": false,
+      "peak_error": 0.04979206337788985,
+      "rmse": 0.012863247572662233,
+      "score": 1.0,
+      "seed": 11
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.13962321944867725,
+      "limit_violation": false,
+      "peak_error": 0.03085486771899629,
+      "rmse": 0.008763203877718121,
+      "score": 1.0,
+      "seed": 12
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.11217832413503427,
+      "limit_violation": false,
+      "peak_error": 0.041192853879812995,
+      "rmse": 0.008142295410458867,
+      "score": 1.0,
+      "seed": 13
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.12021754744343158,
+      "limit_violation": false,
+      "peak_error": 0.1673498558831775,
+      "rmse": 0.029866960289064957,
+      "score": 0.9484389455539528,
+      "seed": 14
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.15878236017657152,
+      "limit_violation": false,
+      "peak_error": 0.06349725229146655,
+      "rmse": 0.012711875379882222,
+      "score": 1.0,
+      "seed": 15
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1579742508038691,
+      "limit_violation": false,
+      "peak_error": 0.19140239536853026,
+      "rmse": 0.03530065800979566,
+      "score": 0.9098284321061108,
+      "seed": 16
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.15440177511282263,
+      "limit_violation": false,
+      "peak_error": 0.10332270083606124,
+      "rmse": 0.019355597823791412,
+      "score": 1.0,
+      "seed": 17
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1470379967328216,
+      "limit_violation": false,
+      "peak_error": 0.12179111247611055,
+      "rmse": 0.022104746384152132,
+      "score": 0.9988216365288747,
+      "seed": 18
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.1357720352541289,
+      "limit_violation": false,
+      "peak_error": 0.13877441669041707,
+      "rmse": 0.026451974186260337,
+      "score": 0.9815594860651958,
+      "seed": 19
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.14138770613737464,
+      "limit_violation": false,
+      "peak_error": 0.16622340182519804,
+      "rmse": 0.03051633754895199,
+      "score": 0.9464568387891753,
+      "seed": 20
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.13444379150042002,
+      "limit_violation": false,
+      "peak_error": 0.05697054372217906,
+      "rmse": 0.011394925307062983,
+      "score": 1.0,
+      "seed": 21
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.13665073967449012,
+      "limit_violation": false,
+      "peak_error": 0.05804667347924826,
+      "rmse": 0.013881247586595735,
+      "score": 1.0,
+      "seed": 22
+    },
+    {
+      "controller": "oracle",
+      "effort": 0.14171983772569155,
+      "limit_violation": false,
+      "peak_error": 0.054871851076846376,
+      "rmse": 0.01204523076514133,
+      "score": 1.0,
+      "seed": 23
+    }
+  ],
+  "summary": {
+    "adaptive": {
+      "rmse_mean": 0.09725243046170536,
+      "score_max": 1.0,
+      "score_mean": 0.6465171943221203,
+      "score_min": 0.1,
+      "unsafe": 0
+    },
+    "nominal": {
+      "rmse_mean": 0.16308513507092862,
+      "score_max": 0.8614780671775022,
+      "score_mean": 0.42258817531816256,
+      "score_min": 0.07122810566366708,
+      "unsafe": 0
+    },
+    "oracle": {
+      "rmse_mean": 0.018483212386845662,
+      "score_max": 1.0,
+      "score_mean": 0.9872212713546974,
+      "score_min": 0.9098284321061108,
+      "unsafe": 0
+    },
+    "robust": {
+      "rmse_mean": 0.17296507177087705,
+      "score_max": 0.7546423862751186,
+      "score_mean": 0.36358155584385426,
+      "score_min": 0.02755121920073172,
+      "unsafe": 0
+    }
+  }
+}

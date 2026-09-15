@@ -66,3 +66,9 @@ tasks/task09/harness/assets/gello_codesign/*/meshes/
 /docs/*
 !/docs/self-hosted-models.md
 tasks/*/docs/
+
+tasks/task10/environment/assets/
+tasks/task10/environment/dev_runner.py
+tasks/task10/solution/payload/
+tasks/task10/tests/harness/
+tasks/task10/tests/assets/

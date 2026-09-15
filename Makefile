@@ -7,7 +7,7 @@
 # the families whose mujoco pin needs its own venv.
 PY ?= .venv/bin/python
 PYTEST_ARGS ?=
-FAMILIES := task01 task02 task03 task04 task05 task06 task07 task08 task09
+FAMILIES := task01 task02 task03 task04 task05 task06 task07 task08 task09 task10
 include tests/suites.mk
 include sim/robocasa/pins.env
 include sim/perception/pins.env
@@ -114,7 +114,7 @@ task03-assets:
 	python3 tasks/task03/build_assets.py --check
 
 # Matrix emitters are stdlib-only, so they run on bare python3; the stagers need the venv.
-task06-assets task07-assets task08-assets task09-assets: task%-assets:
+task06-assets task07-assets task08-assets task09-assets task10-assets: task%-assets:
 	$(PY) tasks/task$*/build_assets.py
 
 # task01: one image per harness level, rlebench-task01-l{1,2,3}-agent:dev (the level decides
@@ -198,6 +198,10 @@ task07: task07-assets
 	docker build -t rlebench-task07-agent:dev tasks/task07/environment
 	docker build -t rlebench-task07-verifier:dev tasks/task07/tests
 
+task10: task10-assets
+	docker build -t rlebench-task10-agent:dev tasks/task10/environment
+	docker build -t rlebench-task10-verifier:dev tasks/task10/tests
+
 task08 task09: task%: task%-assets
 	docker build -t rlebench-task$*-agent:dev tasks/task$*/environment
 	docker build -f tasks/task$*/tests/Dockerfile -t rlebench-task$*-verifier:dev .
@@ -219,6 +223,8 @@ CLEAN_task08 := tasks/task08/environment/assets tasks/task08/tests/harness tasks
                 tasks/task08/tests/models tasks/task08/solution/payload tasks/task08/reference
 CLEAN_task09 := tasks/task09/environment/assets tasks/task09/solution/payload tasks/task09/tests/harness \
                 tasks/task09/tests/rlebench tasks/task09/tests/models
+CLEAN_task10 := tasks/task10/environment/assets tasks/task10/environment/dev_runner.py \
+                tasks/task10/solution/payload tasks/task10/tests/harness tasks/task10/tests/assets
 $(addsuffix -clean,$(FAMILIES)): task%-clean:
 	rm -rf $(CLEAN_task$*)
 	docker images -q --filter reference=$(or $(IMAGES_task$*),'rlebench-task$**') | xargs -r docker rmi -f
@@ -244,7 +250,7 @@ test:
 # Every .venv family plus the cross-cutting modules. task04 and the simulator suites
 # need their own venvs and run through their per-family targets.
 test-all:
-	@for t in task01 task02 task03 task05 task06 task07 task08 task09; do \
+	@for t in task01 task02 task03 task05 task06 task07 task08 task09 task10; do \
 	    $(MAKE) -s test TASK=$$t || exit 1; \
 	done
 	$(MAKE) -s test-host
