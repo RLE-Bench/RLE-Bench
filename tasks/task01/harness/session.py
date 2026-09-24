@@ -74,7 +74,7 @@ class SegmentResult:
     terminated_by: str            # "harness" | "agent"
     final: bool
     success: bool
-    obs: dict | None = None       # final observation, so the agent can decide next
+    obs: dict | None = None       # raw simulator observation; shaped only in step()
     info: dict = field(default_factory=dict)
     # True when this episode (development) or trial (evaluation) cannot be continued.
     # Actions stop being applied for reasons that are not the agent's -- the task
@@ -667,9 +667,13 @@ class MeteredSession:
         like around this, in your own code, deciding each move with the observation in
         front of you.
         """
-        res = self._act(_as_actions(actions), obs_spec=obs_spec)
+        res = self._act(_as_actions(actions))
+        # Specs describe this reply, never the observation retained by the harness.
+        shown, _ = ENV.apply_obs_spec(
+            self.current_env, res.obs, obs_spec, default=C.OBS_RESOLUTION,
+            rendered=C.RENDER_RESOLUTION, ceiling=C.OBS_MAX_RESOLUTION)
         return {
-            "obs": res.obs,
+            "obs": shown,
             "steps": res.steps,
             "success": res.success,
             "episode_over": res.episode_over,
@@ -684,7 +688,7 @@ class MeteredSession:
 
 
 
-    def _act(self, actions, obs_spec=None) -> SegmentResult:
+    def _act(self, actions) -> SegmentResult:
         """Apply actions in the CURRENT episode or trial. No reset.
 
         That is what lets the agent work in pieces: send a few actions, look at what
@@ -700,14 +704,14 @@ class MeteredSession:
                 nxt = (f"begin trial {pos}" if self._eval.current() is not None
                        else "close the evaluation")
                 raise EpisodeOver(f"trial {pos - 1} scored; call reset() to {nxt}")
-            return self._act_eval(actions, obs_spec)
+            return self._act_eval(actions)
         # BEFORE the liveness check, because exhausting the budget is itself what ended
         # the episode: reporting "call reset()" there would send the agent round a loop
         # that cannot help it, instead of telling it the run is over.
         if self.steps_remaining <= 0:
             env = self._ensure_dev_env()
             return self._segment(0, Termination.BUDGET_EXHAUSTED, "harness", True,
-                                 env, self._last_obs, charge=False, spec=obs_spec)
+                                 env, self._last_obs, charge=False)
         # Development: continuing an episode that has ended is refused, never resumed.
         self._require_live_episode()
         self._require_development_open()
@@ -716,9 +720,9 @@ class MeteredSession:
         # belongs to starting one, not to the call that happened to start it.
         obs = self._last_obs if self._last_obs is not None else self._open_dev_episode()
         # No cap: a development episode is ended by the horizon, which reports HORIZON.
-        return self._apply(env, actions, obs, None, charge=True, spec=obs_spec)
+        return self._apply(env, actions, obs, None, charge=True)
 
-    def _act_eval(self, actions, spec=None) -> SegmentResult:
+    def _act_eval(self, actions) -> SegmentResult:
         """Actions inside an evaluation trial.
 
         Steps are charged to the SUBMISSION, never to the interaction budget. When the
@@ -732,7 +736,7 @@ class MeteredSession:
 
         trial_error: str | None = None
         try:
-            res = self._apply(env, actions, run._obs, cap, charge=False, spec=spec)
+            res = self._apply(env, actions, run._obs, cap, charge=False)
         except Exception as exc:  # noqa: BLE001
             # The ENVIRONMENT raised. There is no way to keep driving this trial, but
             # the trials behind it are still worth running, so it is scored as a lost
@@ -784,7 +788,7 @@ class MeteredSession:
         except Exception:  # noqa: BLE001
             return False
 
-    def _apply(self, env, actions, obs, cap, *, charge: bool, spec=None) -> SegmentResult:
+    def _apply(self, env, actions, obs, cap, *, charge: bool) -> SegmentResult:
         """Apply actions in order on `env`, stopping at the first that ends the episode.
 
         THE ONE LOOP. Both phases go through it; `charge=False` for evaluation, where
@@ -805,14 +809,14 @@ class MeteredSession:
             # cap, so the horizon below is what ends an episode there.
             if cap is not None and steps >= cap:
                 return self._segment(steps, Termination.SEGMENT_LIMIT, "harness",
-                                     False, env, obs, charge=charge, spec=spec)
+                                     False, env, obs, charge=charge)
             if (charge and self.max_episode_steps is not None
                     and self.state.episode_steps >= self.max_episode_steps):
                 return self._segment(steps, Termination.HORIZON, "harness",
-                                     True, env, obs, charge=charge, spec=spec)
+                                     True, env, obs, charge=charge)
             if charge and self.steps_remaining <= 0:
                 return self._segment(steps, Termination.BUDGET_EXHAUSTED, "harness",
-                                     True, env, obs, charge=charge, spec=spec)
+                                     True, env, obs, charge=charge)
 
             obs, _reward, done, _i = env.step(action)
             steps += 1
@@ -823,41 +827,31 @@ class MeteredSession:
 
             if env._check_success():
                 return self._segment(steps, Termination.ENV_SUCCESS, "harness",
-                                     True, env, obs, charge=charge, spec=spec)
+                                     True, env, obs, charge=charge)
             if done:
                 return self._segment(steps, Termination.ENV_DONE, "harness", True,
-                                     env, obs, charge=charge, spec=spec)
+                                     env, obs, charge=charge)
 
         # Everything asked for was applied and the episode is still alive.
         return self._segment(steps, Termination.STEP_COMPLETE, "agent", False,
-                             env, obs, charge=charge, spec=spec)
+                             env, obs, charge=charge)
 
     def _segment(self, steps, reason, by, final, env, obs, extra=None,
-                 charge: bool = True, spec=None) -> SegmentResult:
+                 charge: bool = True) -> SegmentResult:
         if charge:
             self._flush_interaction(steps)
         reason = reason or Termination.STEP_COMPLETE
         over = reason in Termination.EPISODE_ENDING
         if charge and over:
-            # Development: remember it, so the next run_segment cannot resume from a
-            # stale observation as though the episode were still alive. Evaluation does
-            # not need this -- _run_eval_segment advances to the next trial itself.
+            # Evaluation liveness is tracked separately by _act_eval.
             self._episode_over = True
             self._last_obs = None
             self.recorder.diagnosis(env, obs, ended_by=reason,
                                     episode=self.state.episodes)
-        # THE observation the agent gets back, so it honours the spec in full -- cameras
-        # AND size. This is the only observation the caller sees, and silently handing back
-        # 128px when it asked for 384 would answer a different question.
-        #
-        # Note the shape of the cost: ONE render per call, whatever the batch size.
-        shown, _ = ENV.apply_obs_spec(
-            env, obs, spec, default=C.OBS_RESOLUTION,
-            rendered=C.RENDER_RESOLUTION, ceiling=C.OBS_MAX_RESOLUTION)
         result = SegmentResult(
             steps=steps, reason=reason,
             terminated_by=by, final=bool(final),
-            success=bool(env._check_success()), obs=shown, info=dict(extra or {}),
+            success=bool(env._check_success()), obs=obs, info=dict(extra or {}),
             episode_over=over,
         )
         self.recorder.event("segment", steps=steps, reason=reason, terminated_by=by,
