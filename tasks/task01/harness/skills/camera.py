@@ -45,7 +45,7 @@ def intrinsics(camera: str, height: int, width: int | None = None) -> np.ndarray
     """The (3, 3) pinhole matrix for `camera` at the size you rendered.
 
     `width` defaults to `height`, since `ObsSpec(width=N)` renders a square. Pixels are
-    square, so one focal length serves both axes.
+    scaled from the fixed square render; rectangular deliveries scale each axis.
     """
     name = _base_name(camera)
     if name not in FOVY:
@@ -53,7 +53,7 @@ def intrinsics(camera: str, height: int, width: int | None = None) -> np.ndarray
     h = int(height)
     w = int(height if width is None else width)
     f = (h / 2.0) / np.tan(np.radians(FOVY[name]) / 2.0)
-    return np.array([[f, 0.0, (w - 1) / 2.0],
+    return np.array([[f * w / h, 0.0, (w - 1) / 2.0],
                      [0.0, f, (h - 1) / 2.0],
                      [0.0, 0.0, 1.0]])
 

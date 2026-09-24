@@ -11,26 +11,29 @@ look at what comes back.
 **Two things differ from development:**
 
 1. You are being scored.
-2. **`sim.reset()` now ends the current trajectory and scores it immediately** — it is
+2. **`sim.finish_trial()` ends the current trajectory and scores it immediately** — it is
    a "give up on this attempt" move, not a restart. Whatever state the trial is in
-   when you reset is what gets graded.
+   when you finish is what gets graded. `reset()` is unavailable in evaluation.
 
 ## Where you are
 
 The evaluation is already open — you do not need to start it. Ask where you are:
 
 ```python
-from harness.client import SpeedrunClient
+from harness.client import SimClient
 
-with SpeedrunClient() as sim:
-    print(sim.phase())          # "evaluation"
-    trial = sim.trial_info()    # position, total_trials, obs, instruction
-    print(trial["instruction"]) # the goal for THIS trial
+with SimClient() as sim:
+    print(sim.status()["phase"])  # "evaluation"
+    trial = sim.task_info()       # trial_index, total_trials, instruction
+    obs = sim.observe()["obs"]
+    print(trial["instruction"])   # the goal for THIS trial
 ```
 
 The simulator serves one connection at a time — close your client before opening another.
+A second connection receives `RemoteError(kind="busy")`; leaving a `with` block
+releases control without resetting the scene.
 
-There are **several trials**, across several kitchens. `trial_info()["total_trials"]`
+There are **several trials**, across several kitchens. `status()["total_trials"]`
 says how many; each one you solve raises your score.
 
 `sim.step` and `sim.observe` behave here exactly as they did in development, so the loop you
@@ -39,7 +42,9 @@ you like. Looking is still free and still ends nothing.
 
 The lenses, if you deproject a pixel yourself: `robot0_agentview_left` and `_right` are
 **fovy 60°**, `robot0_eye_in_hand` is **fovy 75°**, and `f = (H/2) / tan(fovy/2)` for the
-height `H` you rendered at. Where the cameras sit on the robot is yours to measure.
+height `H` of a square delivery. Where the cameras sit on the robot is yours to measure.
+For rectangular images, use the returned per-axis intrinsic matrix in
+`sim.observe()["intrinsics"]`; all deliveries resize a 512×512 render.
 
 One thing is worth re-reading: resolution is paid for in **wall clock**, and this phase has
 its own. Streaming full-size frames on every step of every trial can run you out of time
@@ -51,26 +56,30 @@ Only the first of these is your choice:
 
 | ending | what happens |
 |---|---|
-| you call `sim.reset()` while the trial is running | the trajectory is scored where it stands — you have given up on it |
+| you call `sim.finish_trial()` while the trial is running | the trajectory is scored where it stands — you have given up on it |
 | the environment stops | the task's success condition fires, or the episode finishes |
-| the step limit | the trial runs out of steps — the ceiling is `trial_info()["max_steps"]` |
-| the trial errors | the scene or environment failed; that trial is lost and the run continues |
+| the step limit | the trial runs out of steps — the ceiling is `task_info()["max_steps_per_trial"]` |
+| the trial errors | the simulator failed (`sim_error`); confirmed evidence is retained and the trial ends |
 
 Those last three are not your choice, so watch for them: `res["episode_over"]` tells you
 the trial is finished and scored. The step figures in `sim.status()` and
 `res["steps_remaining"]` count this trial, not the spent development budget.
 
-**Call `sim.reset()` to move to the next trial.**
+**Call `sim.next_trial()` to move to the next trial.**
 
 ```python
 res = sim.step(actions)
 if res["episode_over"]:
-    sim.reset()          # trial already scored — this just starts the next one
+    sim.next_trial()     # trial already scored — this starts the next one
 ```
 
-`reset()` costs you a trial *only* when the trial was still alive. Stepping after a
-trial has ended raises `RemoteError` saying which trial was scored: `reset()` is the
-only way to advance, and it returns the new trial's descriptor.
+`finish_trial()` gives up only if the current trial is still alive. `next_trial()`
+requires an ended trial; it never abandons a live one. Stepping after a trial ends
+raises `RemoteError(kind="episode_over")`. After advancing, read `task_info()` for
+the new goal and `observe()` for its state. After the last trial, the phase is
+`"finished"` and there is no next observation.
+
+Batches contain 1–200 actions and cannot exceed `status()["steps_remaining"]`.
 
 Your score is judged entirely by the environment's own success condition. There is no
 channel for asserting it.
@@ -91,7 +100,19 @@ trials.
 Nothing is saved by finishing early — an unspent evaluation is simply an unscored one, and a
 trial you never drove scores the same as one you drove and failed.
 
-If a trial is clearly unrecoverable, resetting frees the remaining time for the next one —
-but it forfeits that trial, so only do it when the attempt is genuinely lost.
+If a trial is clearly unrecoverable, call `finish_trial()` and then `next_trial()`
+to use the remaining time on the next one. This forfeits the current attempt.
 
-When you reset after the last trial, the result is returned to you and the run is over.
+When `sim.status()["phase"]` is `"finished"`, end your turn.
+
+`seconds_remaining` reports the phase allowance minus time since its first API
+request. Harbor enforces the actual wall-clock deadline, which may arrive earlier.
+
+## Simulator failures
+
+If `ended` is `sim_error`, the current episode or trial cannot continue. Confirmed
+progress is retained. An action whose result was lost still costs one step;
+`res["steps"]` counts confirmed actions and may be smaller than the budget decrease.
+Call `next_trial()` after `sim_error` to move to the next trial.
+If the connection is lost, create a new client and inspect `status()` and its
+`last_request` before acting. Never blindly replay a batch whose result was lost.

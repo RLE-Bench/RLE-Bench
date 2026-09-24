@@ -14,16 +14,12 @@ jobs/
 # family's config, so they are build output, not source. L<n>/ holds the Harbor
 # tasks, images/ the docker build context per level.
 tasks/task01/L[0-9]/
-# synced from sim/robocasa by build_assets.py (SHARED_MODULES)
-tasks/task01/harness/eval_video.py
-tasks/task02/harness/eval_video.py
 tasks/task01/images/
 tasks/task02/[0-9][0-9]-*/
 tasks/task02/image/
 tasks/task03/[0-9][0-9]-*/
 tasks/task03/image/
-# task03's host package is the merged speedrun+tabletop emit (build_assets --host-pkg).
-tasks/task03/harness/
+tasks/task03/image-*/
 tasks/task04/[0-9][0-9]-*/
 tasks/task05/[0-9][0-9]-*/
 *.mp4
@@ -66,3 +62,5 @@ tasks/task09/harness/assets/gello_codesign/*/meshes/
 /docs/*
 !/docs/self-hosted-models.md
 tasks/*/docs/
+
+tmp/

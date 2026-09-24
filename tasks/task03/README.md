@@ -1,109 +1,186 @@
 # Task 03 — Tabletop reasoning
 
 Five tabletop tasks solved from RGB images and robot proprioception through a
-small public client. The simulator, scene definitions, scoring and state records
-are root-only in the agent's container, and the agent reaches the simulator only
-through a metered socket.
+small public client. The simulator, scene definitions, hidden parameters and
+scoring records are root-only; the agent acts through a metered Unix socket.
 
-| task                        | goal                                              | budget               | image                                  |
-| --------------------------- | ------------------------------------------------- | -------------------- | -------------------------------------- |
-| `01-tower-max-height`       | build a tall stable tower                         | 50,000 steps         | `rlebench-task03-agent:dev`            |
-| `02-cantilever-overhang`    | extend a stack beyond the table edge              | 50,000 steps         | `rlebench-task03-agent:dev`            |
-| `03-balance-coins`          | identify the heavy cube using the balance         | 50,000 steps         | `rlebench-task03-agent:dev`            |
-| `04-rubik-cube`             | solve a physical 2×2 cube with two arms           | 50,000 steps         | `rlebench-task03-pocket-agent:dev`     |
-| `05-hidden-center-of-mass`  | identify hidden ballast quadrants in three boxes  | 12,000 steps per box | `rlebench-task03-hidden-com-agent:dev` |
+| Task | Goal | Budget | Image |
+| --- | --- | --- | --- |
+| `01-tower-max-height` | Build a tall stable tower | 50,000 steps | `rlebench-task03-agent:dev` |
+| `02-cantilever-overhang` | Extend a stack beyond the table edge | 50,000 steps | `rlebench-task03-agent:dev` |
+| `03-balance-coins` | Identify the heavy cube using a balance | 50,000 steps | `rlebench-task03-agent:dev` |
+| `04-rubik-cube` | Physically solve a 2×2 cube with two arms | 50,000 steps | `rlebench-task03-pocket-agent:dev` |
+| `05-hidden-center-of-mass` | Identify ballast quadrants in three sealed boxes | 12,000 steps per box | `rlebench-task03-hidden-com-agent:dev` |
 
-## How it works
+## Workflow and public APIs
 
-Tasks 01–03 share `TabletopClient` (`observe`, `step`, `move`, `reset`, `finish`)
-over a PandaOmron arm, gripper, mobile base and torso. Each is one nine-hour
-attempt: `reset()` costs one step and restores the same private initial scene,
-and `finish()`, budget exhaustion or agent exit scores the final simulator state.
-No object poses, skills or depth are exposed; `03-balance-coins` additionally
-provides live cube and pan centres, with masses and the heavy cube kept private.
+There is no development/evaluation split. Tasks 01–04 each have one nine-hour
+attempt; HiddenCOM has one hour for all three boxes. Public API and scene geometry
+are documented in [harness/client.py](harness/client.py), installed at
+`/opt/rlebench/harness/client.py` and accessible through Python `help()`.
 
-Task 04 uses two tilted Panda arms, one front RGB camera with optional depth,
-`SpeedrunClient`, and a metered drop rescue. There is no phase split; reset
-ends the only trial and physical success ends it automatically.
+### Tower, cantilever and balance
 
-Task 05 uses a fixed Panda and `HiddenCOMClient`, with one immutable quadrant
-submission per box and no reset.
+`TabletopClient` exposes `observe`, `step`, `move`, `reset` and `finish` for a
+PandaOmron arm, gripper, mobile base and torso. Control runs at 20 Hz with 12-D
+actions; `move` tracks a world-frame tool pose through the same metered controller.
 
-### Scoring
+```python
+from harness.client import TabletopClient
+from PIL import Image
 
+with TabletopClient() as sim:
+    obs = sim.observe()
+    Image.fromarray(obs["images"]["left"]).save("/workspace/left.png")
+    # Manipulate with step()/move(), then finish() to submit the final scene.
 ```
-reward = max(0, quality - 0.5 * steps_used / step_budget)
-```
 
-with quality and reward in [0, 1], charging every step including resets. Task 05
-applies this per box and averages the three results. Task 04's quality decays
-with quarter-turn overhead over the optimal solve (optimal scores 1, twice
-optimal 0.5); unclassified transitions cap the reward at 0.5, and an unsolved
-cube scores zero.
+`reset()` costs one step and restores the same private initial scene. `finish()`,
+budget exhaustion or the end of the Harbor attempt submits the final simulator
+state. Release the structure before finishing. No depth, masses, contact readings
+or general object poses are supplied. BalanceCoins additionally exposes cube and
+pan centres; the heavy cube's identity stays private.
 
-## Layout
+### Physical cube
 
-```
-build_levels.py          the generator: --emit-all, --list, --check
-build_assets.py          stages the public client and the private tabletop package
-build_pocket.py          emits 04-rubik-cube from _template/pocket and tabletop/pocket
-build_hidden_com.py      emits 05-hidden-center-of-mass from _template/hidden_com
-tabletop/                scenes, session, service, scoring, analytic checks, and the
-                         pocket/ and hidden_com/ sub-packages
-dev/                     previews, camera and isolation checks for the pocket and hidden-COM tasks
+`SpeedrunClient` controls two tilted Panda arms through 14-D actions and a front RGB
+camera with optional depth. `task_info()` describes the robot frames and camera.
+There is one trial: `reset()` forfeits it, and physical success ends it automatically.
+`recover_drop()` restores a dropped cube to its support for one metered step without
+rerolling the scramble or refilling the allowance. The public helper and manual are
+staged from `_template/cube_recovery.py` and `_template/pocket_manual.md`.
+
+### Hidden center of mass
+
+`HiddenCOMClient` controls a fixed Panda with 7-D actions and three RGB cameras.
+Submit one immutable A/B/C/D answer per box with `submit()`. The first two submissions
+advance to the next box; observe before acting again. The final reply has `done=True`.
+There is no reset or correctness feedback. At the movement cap the agent can still
+observe and submit. After `sim_error`, a valid submission advances without credit
+for that failed box.
+
+All variants grant one connected client exclusive control. A second client receives
+`busy`; disconnecting releases the lease without resetting the scene. Observation
+is free, batches contain 1–200 actions, and requests exceeding the remaining budget
+are rejected. All cameras render at 512×512; supported smaller image requests resize
+those frames. Tabletop/HiddenCOM convenience observations use 512×512 RGB.
+
+## Scoring
+
+The verifier uses committed simulator evidence, never an agent's written answer or
+reported metric. Current reward is normalized task quality, with no additional
+control-step discount:
+
+| Task | Quality / reward |
+| --- | --- |
+| Tower | Final stable height relative to the analytic optimum |
+| Cantilever | Final stable overhang relative to the analytic optimum |
+| BalanceCoins | Correct final selection, discounted for excess weighings |
+| Cube | Zero unless physically solved; solved quality decays with excess quarter turns |
+| HiddenCOM | Fraction of the three submitted quadrants that are correct |
+
+For a nontrivial cube scramble, solved quality is
+`2 ** -max(0, actual_qtm / optimal_qtm - 1)`: optimal scores 1, twice optimal 0.5.
+Unclassified transitions cap quality at 0.5. The action budget still applies.
+
+The original agent wording is preserved, including the cube's binary-success
+sentence and HiddenCOM's request to minimize steps. This maintainer description
+reflects the implemented scorer. The old README's
+`max(0, quality - 0.5 * steps_used / step_budget)` formula is not used by this runtime.
+
+## Isolation, recovery and layout
+
+The family owns its [harness/](harness/) source, including the broker/worker runtime
+also used in task01/02. Domain physics in [tabletop/](tabletop/) is staged privately
+as `harness.tabletop`; it is not assembled from task01 at build time.
+
+The root broker records charges before dispatch and confirmed evidence afterwards
+in SQLite. One worker owns physics and GL, with supervision and bounded operation
+timeouts. A simulator failure closes the affected attempt; confirmed evidence
+remains available to the independent verifier. HiddenCOM can advance to remaining
+boxes. Optional media encoding cannot prevent numeric reward generation.
+
+`/opt/src`, `/opt/private` and `/var/lib/rlebench` are root-owned and inaccessible to
+the agent. Only public client/protocol code, documentation and variant-specific
+helpers enter `/opt/rlebench`. Hidden masses, seeds and scoring stay private.
+
+```text
+harness/                 tracked client, task configuration, adapter and runtime/
+tabletop/                private scenes, analytic models, budgets, pocket/, hidden_com/
 _template/
-  task.toml.in, instruction.md.in, image/, environment/, tests/, solution/   tasks 01–03
-  pocket/                task 04: task.toml, instruction, environment, tests
-  hidden_com/            task 05: task.toml, instruction, environment, tests, solution
-
-NN-slug/                 GENERATED: the five Harbor tasks
-image/                   GENERATED: the shared tabletop build context
-harness/                 GENERATED: the host-side package (task01's daemon + harness.tabletop)
+  instruction.md.in, tasks.json   tower/cantilever/balance instructions
+  pocket.md, pocket_manual.md, cube_recovery.py
+  hidden_com.md, hidden_com_solution/
+  image/                 Dockerfile and runtime/isolation scripts
+  solution/              recorded tabletop replay Oracles
+build_levels.py          emits any of the five tasks through rlebench/runtime_build.py
+build_assets.py          staging/check entry point
+dev/                     host-only references and analysis
+NN-slug/                 GENERATED Harbor tasks
+image/                   GENERATED tabletop image context
+image-pocket/            GENERATED cube image context
+image-hidden-com/        GENERATED HiddenCOM image context
 ```
 
-The private daemon package is staged from task01 with task03's session, service
-and scenes layered under `harness.tabletop`. The public tree of tasks 01–03
-holds only `harness/__init__.py` and `harness/client.py`; API and geometry
-documentation lives in the client modules. Nothing here needs the RoboCasa
-dataset or perception models; MuJoCo and robosuite use the simulator layer's
-pins.
+Edit the tracked sources and templates, then regenerate. Budgets live in
+`tabletop/budgets.py`; task schedules in `harness/task.py`; generated Harbor timeouts
+in `rlebench/runtime_build.py`. Keep instructions and timeouts aligned when changing
+budgets. `AGENT_UID` defaults to 1000 and cannot be root.
 
-## Running it
+## Build and run
+
+Requires the pinned RoboCasa simulator base image, Docker/Compose, an NVIDIA GPU
+with the Container Toolkit and Harbor. Task03 does not mount the RoboCasa dataset
+or require perception models. MuJoCo and robosuite come from the shared base image.
 
 ```bash
-make task03            # emit the five tasks and build the three images
-make task03-assets     # regenerate only
+make task03 TASK_CELLS=01-tower-max-height    # one representative task/image
+make task03                                 # all five tasks, three images
+make task03-assets                          # staging without Docker builds
 make task03-clean
 ```
 
-`rlebench prepare task03` runs the build.
+`rlebench prepare task03` runs the task build; the shared simulator image must already
+be available (see [sim/robocasa](../../sim/robocasa/README.md)).
 
 ```bash
-rlebench run task03/01-tower-max-height -a <agent> -m <model>    # one task
-rlebench run task03 -a <agent> -m <model> -d cuda:0              # all five
-rlebench run task03 -a oracle                                     # the reference replays
+rlebench run task03/01-tower-max-height -a <agent> -m <model> --device cuda:0
+rlebench run task03 -a <agent> -m <model> --device cuda:0
+rlebench run task03/01-tower-max-height -a oracle --device cuda:0
+rlebench run task03/05-hidden-center-of-mass -a oracle --device cuda:0
 ```
 
-By hand:
+The runner handles GPU placement and agent-host access; `--dry-run` prints its
+Harbor command. Tabletop Oracles replay recorded actions through the public API;
+HiddenCOM's Oracle estimates tilt from RGB. A completed replay is not a guarantee
+of an optimal score. The cube has no Oracle, so select supported cells explicitly.
 
-```bash
-harbor run -p tasks/task03 -i 01-tower-max-height -a <agent> -m <model> --override-gpus 0
-```
+## Results and checks
 
-Reference solutions for tasks 01–03 replay recorded control actions through the
-public metered API; task 05's Oracle estimates tilt from RGB. Task 04 ships no
-Oracle.
-
-## Checking the guarantees
+For each Harbor trial, `verifier/reward.json` contains reward, trial counts and
+infrastructure failures; `verifier/diagnosis.json` reports ledger/handoff status.
+`verifier/media/` contains best-effort observation videos and an index. Agent sessions
+are under `agent/`, and collected files under `artifacts/workspace/`.
+`rlebench view jobs` displays results and media. Private logs are under
+`/var/lib/rlebench` while the container exists.
 
 ```bash
 python3 tasks/task03/build_levels.py --check
 python3 tasks/task03/build_assets.py --check
-docker run --rm -u agent --entrypoint /opt/check_isolation.sh rlebench-task03-agent:dev
 make test TASK=task03
+python3 tests/runtime/container_check.py --family task03 --task TowerMaxHeight \
+    --gpu 0 --report /tmp/task03-tabletop.json
+python3 tests/runtime/container_check.py --family task03 --task RubikCube \
+    --variant pocket --gpu 0 --report /tmp/task03-cube.json
+python3 tests/runtime/container_check.py --family task03 --task HiddenCOM \
+    --variant hidden-com --gpu 0 --report /tmp/task03-hidden-com.json
 ```
 
-The isolation check runs as the agent and asserts that private files and modules
-are unreadable, privileged requests are refused, and only the authorised
-observation fields are served. The pocket and hidden-COM images have their own
-checks under `dev/`.
+Build each image before its container check. These checks exercise real rendering,
+controls and exclusivity, and verify as the agent UID that private files, modules
+and the control socket are inaccessible. In a started, idle container, use
+`docker exec --user agent <container> python /opt/check_isolation.py`.
+
+For `busy`, close the current lease owner. For `sim_error` or startup failures,
+inspect container/worker logs and GPU access. A single-attempt task cannot restart
+a failed graded scene; the verifier still reports its committed score and diagnostics.

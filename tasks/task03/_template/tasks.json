@@ -1,0 +1,14 @@
+{
+  "TowerMaxHeight": {
+    "goal": "stack mixed pieces into the tallest stable tower",
+    "notes": "Some pieces cannot be stacked on; choose which pieces to use and in what order. Leave the completed tower standing on the table without support from the robot. Retract the arm before calling `finish()`."
+  },
+  "CantileverOverhang": {
+    "goal": "extend a stack of identical blocks past the table edge",
+    "notes": "Build a stable stack extending beyond any table edge. Leave it supported by the table without support from the robot. Retract the arm before calling `finish()`."
+  },
+  "BalanceCoins": {
+    "goal": "find the heavy cube with the balance and deliver it to the answer mat",
+    "notes": "Exactly one of the visually identical cubes is heavier. The attempt succeeds when that cube -- and only it -- rests on the green answer mat. Use as few weighings as possible: among successful attempts, fewer weighings earn a higher score. Plan comparisons before moving cubes. Observations from observe(), reset(), step(), and move() include cube_positions (coin_0 through coin_8 centers) and pan_positions (left and right upper-surface centers). All coordinates are live world-frame xyz in meters. Cube IDs persist across movement and reset; they do not encode weight. The enlarged pans have diameter 0.225 m and centers 0.5 m apart when level."
+  }
+}

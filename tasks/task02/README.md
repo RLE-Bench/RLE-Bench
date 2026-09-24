@@ -1,237 +1,219 @@
 # Task 02 — RoboCasa harness engineering
 
-Can an agent build a harness — perception primitives, controllers and a manual — that a
-**different** agent, with no shared context, can pick up and apply to a task neither has
-seen?
+Can an agent build perception primitives, controllers and a manual that a
+**different agent, with no shared context**, can apply to a task neither has seen?
 
-RoboCasa groups its composite kitchen tasks into activity groups. Task02 takes one group,
-holds out one member for grading, and lets the agent practise on three others chosen so
-that every atomic primitive the held-out task needs is covered. One Harbor task per group,
-fifteen groups, one shared image.
+Each activity group has three training tasks and one held-out composite task.
+The training set was selected to cover the held-out task's atomic primitives.
+There are fifteen groups, each a Harbor task, sharing one simulator image.
 
-```
-develop     agent A: practises on the training members, writes
-            /workspace/agent_harness/{MANUAL.md, perception/, controllers/}
-eval_01     agent B: fresh context, reads the manual, one shot at the held-out task
+```text
+develop   agent A practises and writes /workspace/agent_harness/
+          MANUAL.md, perception/, controllers/, dependencies
+eval_01   fresh agent B reads those files and attempts the held-out task
 ...
-eval_05     agent F: same, an independent draw          reward = mean stage score
+eval_05   fresh agent F receives the same frozen files and an independent scene
 ```
 
-| band   | slug                       | held-out task            |
-| ------ | -------------------------- | ------------------------ |
-| EASY   | `01-washing-dishes`        | `DumpLeftovers`          |
-| EASY   | `02-sauteing-vegetables`   | `PlaceVegetablesEvenly`  |
-| EASY   | `03-baking`                | `PastryDisplay`          |
-| EASY   | `04-reheating-food`        | `SimmeringSauce`         |
-| EASY   | `05-chopping-food`         | `ClearCuttingBoard`      |
-| MEDIUM | `06-setting-the-table`     | `AlignSilverware`        |
-| MEDIUM | `07-portioning-meals`      | `PortionHotDogs`         |
-| MEDIUM | `08-defrosting-food`       | `DefrostByCategory`      |
-| MEDIUM | `09-arranging-buffet`      | `PlaceBeveragesTogether` |
-| MEDIUM | `10-serving-beverages`     | `MatchCupAndDrink`       |
-| HARD   | `11-loading-fridge`        | `MoveFreezerToFridge`    |
-| HARD   | `12-managing-freezer-space`| `SeparateFreezerRack`    |
-| HARD   | `13-clearing-table`        | `CandleCleanup`          |
-| HARD   | `14-microwaving-food`      | `PlaceMicrowaveSafeItem` |
-| HARD   | `15-storing-leftovers`     | `StoreLeftoversInBowl`   |
+| Band | Slug | Held-out task |
+| --- | --- | --- |
+| EASY | `01-washing-dishes` | `DumpLeftovers` |
+| EASY | `02-sauteing-vegetables` | `PlaceVegetablesEvenly` |
+| EASY | `03-baking` | `PastryDisplay` |
+| EASY | `04-reheating-food` | `SimmeringSauce` |
+| EASY | `05-chopping-food` | `ClearCuttingBoard` |
+| MEDIUM | `06-setting-the-table` | `AlignSilverware` |
+| MEDIUM | `07-portioning-meals` | `PortionHotDogs` |
+| MEDIUM | `08-defrosting-food` | `DefrostByCategory` |
+| MEDIUM | `09-arranging-buffet` | `PlaceBeveragesTogether` |
+| MEDIUM | `10-serving-beverages` | `MatchCupAndDrink` |
+| HARD | `11-loading-fridge` | `MoveFreezerToFridge` |
+| HARD | `12-managing-freezer-space` | `SeparateFreezerRack` |
+| HARD | `13-clearing-table` | `CandleCleanup` |
+| HARD | `14-microwaving-food` | `PlaceMicrowaveSafeItem` |
+| HARD | `15-storing-leftovers` | `StoreLeftoversInBowl` |
 
-The EASY and MEDIUM bands are open-surface work; the HARD band needs hinged doors or
-enclosed cavities. `build_groups.py --list` prints every group with its training set and
-primitive coverage.
+EASY/MEDIUM primarily use open surfaces; HARD includes doors and enclosed cavities.
+This table is maintainer information and is not shipped to the agent. The full
+training/held-out split lives in [harness/config.py](harness/config.py).
 
-## How it works
+## Workflow and public API
 
-The simulator is reachable only through a metered Unix socket served by a root daemon in
-the agent's container. The development agent sees three cameras and proprioception, never
-object poses, and there is no detector in the image: perception is a rule the agent fits
-or its own reading of a saved frame. Its deliverable is `/workspace/agent_harness`, which
-is on `PYTHONPATH` in every later step.
+Development has 8 hours and 75,000 interactions. Each of five evaluation steps has
+1 hour and 5,000 actions. Practice episodes use the same 5,000-action ceiling.
+Development samples RoboCasa's `pretrain` split; evaluation uses `target` scenes.
 
-Each graded trial is its own Harbor step with a fresh agent. Runs go **without**
-`--resume-trajectory`, so nothing but the harness directory reaches an evaluation agent.
-A root collect hook advances the daemon between steps (`open-evaluation`, `next-trial`)
-and seals the ledger after the last trial.
+The agent sees three RGB/depth cameras and robot proprioception, without object
+poses or a provided detector. It builds perception from observations. All actions
+pass through the metered client; the simulator is never imported into its process.
 
-### Scoring
+```python
+from harness.client import SimClient, ObsSpec
 
+with SimClient() as sim:
+    tasks = sim.list_tasks()                      # development training set only
+    obs = sim.reset(task=tasks[0])["obs"]
+    look = sim.observe(ObsSpec(width=512, depth=True))
+    print(sim.task_info(), sim.status())
+    # Write reusable tools and MANUAL.md under /workspace/agent_harness.
+    # Call sim.end_development() when ready, then end the agent turn.
 ```
-reward = mean stage score over all planned trials
-trial_score = (best_count - reset_count) / (total - reset_count)
+
+`step()` accepts one 12-D action or 1–200 actions in a batch. Observation is free;
+development actions and resets cost interactions. Only the current environment is
+retained, so switching training tasks rebuilds it. Rendering always uses 512×512;
+default delivery is 256×256. RGB/depth are cached per state and resized on request.
+Use `ObsSpec(cameras=())` for proprioception alone.
+
+Evaluation starts with its assigned trial already open. `task_info()["instruction"]`
+provides the goal; `finish_trial()` gives up the attempt. Neither `reset()` nor
+`next_trial()` is available. End the turn after the attempt ends; Harbor opens the
+next step. The generated instructions contain the full contract.
+
+### File handoff
+
+Runs do not resume the development conversation. The root hook freezes
+`/workspace/agent_harness` once, then restores that same snapshot before every
+evaluation. It is on `PYTHONPATH`; dependencies must be regular files inside it.
+Symlinks and special files are rejected. Workspace experiments and evaluation edits
+do not transfer, and known agent CLI conversation stores are cleared. Detached
+agent processes are stopped at step boundaries.
+
+The steps share a container: this is a controlled file handoff, not a fresh-container
+sandbox against every possible covert channel. Keep the deliverable directory named
+`agent_harness`, so it does not shadow the simulator's `harness` package.
+
+## Scoring
+
+```text
+trial_score = (best_count − reset_count) / (total − reset_count)
+reward = mean trial_score over all planned evaluation trials
 ```
 
-Composite success predicates are conjunctions, and RoboCasa scores them 0 or 1. Each
-held-out task has a private stage function in `harness/stages.py` that mirrors its
-`_check_success` conjunct by conjunct, so a trial earns the fraction of available
-conjuncts it completed at its best moment. A solved trial scores 1, a do-nothing trial 0,
-an unreached trial 0. `success_rate` (RoboCasa's own predicate) is reported alongside and
-is not the reward. Development interaction is a hard cap that earns nothing.
+[harness/stages.py](harness/stages.py) mirrors each held-out task's success conjuncts.
+The scorer retains the best whole stage vector observed at one instant; it does not
+combine individually satisfied stages from different times. Conditions already true
+at reset earn no free credit. Complete simulator-confirmed success scores 1;
+do-nothing and unreached trials score 0. `success_rate` is reported separately.
+Development interaction is a hard cap, with no efficiency bonus.
 
-Every step's verifier writes a cumulative reward, and `multi_step_reward_strategy =
-"final"` keeps the last one, so an aborted run scores what it earned.
+Each verifier writes cumulative reward; `multi_step_reward_strategy = "final"`
+selects the last one. Scores come only from private simulator evidence. The original
+completion-oriented agent instructions are preserved; this README describes the
+implemented partial-credit scorer for maintainers.
 
-### The one secret
+## Isolation and failure handling
 
-Task02 hides **which task it is graded on**. An agent that learned the held-out name would
-practise it, and the benchmark would measure memorisation instead of transfer. So
-`config.py` and `stages.py` ship only in the root-only `/opt/private`; the splits are a
-fixed table there, selected by `RLEBENCH_GROUP`, which names only the group; no trial
-descriptor, status reply or observation names a task; `build_assets.py --check` fails if a
-held-out name appears anywhere in the agent-readable tree; and each `eval_NN` step's
-`setup.sh` scrubs the previous verifier's output before its agent starts.
+One root broker grants an exclusive client lease and controls one physics/GL worker.
+A second client receives `busy`; disconnecting preserves the scene and idle clients
+have no timeout. The root-only SQLite ledger records charges before dispatch and
+confirmed evidence afterwards. A worker failure retires the current trial with
+`sim_error`, retaining confirmed credit. Subsequent Harbor steps can start new
+workers. Lost actions are not replayed, and verification does not need a live simulator.
 
-### Knobs
+`/opt/src`, `/opt/private` and `/var/lib/rlebench` are inaccessible to the agent.
+The held-out task class, seeds and stage functions stay in private code; the public
+interface supplies the task instruction without exposing the hidden class name.
+Root workflow control is separate from the public socket. Prior verifier JSON is
+removed before the next agent starts.
 
-Every knob is an environment variable in `task.toml`. `[environment.env]` is readable by
-the agent; nothing secret may go there.
+## Configuration and layout
 
-| knob                            | default                    | what it does                                                     |
-| ------------------------------- | -------------------------- | ---------------------------------------------------------------- |
-| `RLEBENCH_INTERACTION_STEPS`    | 75000                      | development step budget; a hard cap worth no score               |
-| `RLEBENCH_MAX_STEPS_PER_TRIAL`  | 5000                       | per-trial ceiling, and the development episode ceiling with it   |
-| `RLEBENCH_ENV_CACHE`            | 3                          | resident development environments                                |
-| `RLEBENCH_DEVELOP_SECONDS`      | 28800                      | the clock the daemon reports; mirror `[steps.agent] timeout_sec` |
-| `RLEBENCH_TRIAL_SECONDS`        | 3600                       | per-trial clock; mirror each `eval_NN` step's `timeout_sec`      |
-| `RLEBENCH_HARNESS_DIR`          | `/workspace/agent_harness` | the handoff directory                                            |
-| `RLEBENCH_DEBUG` (shell)        | 0                          | live operator view under the job directory                       |
-| `RLEBENCH_TIMEOUT_MULT` (shell) | 1                          | scales the reported clock with `--agent-timeout-multiplier`      |
+| Setting | Default / location |
+| --- | --- |
+| Group | `RLEBENCH_GROUP`, generated slug |
+| Development budget | `RLEBENCH_INTERACTION_STEPS=75000` |
+| Practice/evaluation horizon | `RLEBENCH_MAX_STEPS_PER_TRIAL=5000` |
+| Reported clocks | `RLEBENCH_DEVELOP_SECONDS=28800`, `RLEBENCH_TRIAL_SECONDS=3600` |
+| Clock multiplier | `RLEBENCH_TIMEOUT_MULT=1` |
+| Number of evaluation steps | `TRIALS_PER_TASK=5` in `harness/config.py`; regenerate after changing |
+| Handoff directory | `/workspace/agent_harness` |
 
-The handoff directory is not called `harness`: Harbor execs hooks from `/workspace`, and
-a package of that name there would shadow the root-only `/opt/private/harness`.
+Generated `task.toml` forwards budget and multiplier overrides from the host; other
+clock overrides must be added to its environment table. Keep reported clocks and
+Harbor step timeouts aligned. Pair `RLEBENCH_TIMEOUT_MULT` with Harbor's
+`--agent-timeout-multiplier`; the actual deadline is enforced by Harbor, while the
+reported phase clock begins at the first API request.
 
-## Layout
-
-```
-build_groups.py          the GROUPS table; --emit writes a task dir per active group,
-                         --trials N sets the graded-trial count, --check verifies
-build_assets.py          stages the payload trees; --check asserts the boundary
-harness/                 daemon, session, ledger, config (every split), stages, scorer,
-                         and the agent-visible client, protocol, controller, perception
-dev/                     decompose.py and the checked-in primitive audit and stage baseline
+```text
+harness/                 private split, stage predicates, task adapter and backend
+  client.py              public SimClient/ObsSpec exports
+  runtime/               broker, worker, ledger, handoff and verifier
 _template/
-  task.toml.in           develop + one generated step per trial; @@SLUG@@ per group
-  environment/docker-compose.yaml   GPU reservation + read-only asset bind
-  image/                 Dockerfile, entrypoint.sh, seal_ledger.sh, check_isolation.sh
-  steps/{develop,eval_01}/   instruction + oracle; --emit copies eval_01 to eval_NN
-  tests/test.sh          the verifier: harness.verify_main, once per step
-
-NN-slug/                 GENERATED: one Harbor task per group
-image/                   GENERATED: the one build context
-  payload_agent/         client, protocol, controller, perception   (world-readable)
-  payload_private/       everything, including config and stages    (root 0700)
+  image/                 Dockerfile and startup/control/verification/isolation scripts
+  steps/{develop,eval_01}/   instruction templates; eval template reused for every trial
+build_groups.py          emits selected groups through rlebench/runtime_build.py
+build_assets.py          staging/check entry point
+dev/                     primitive audit generator and checked-in audit/baseline data
+NN-slug/                 GENERATED Harbor tasks with develop + eval_NN steps
+image/                   GENERATED shared public/private build payloads
 ```
 
-The generated trees are gitignored. Edit `harness/`, `_template/` or `GROUPS`, then
-`make task02`.
+To change the split, edit `SPLITS` in `harness/config.py` and check its primitive
+coverage against `dev/data/task02_primitive_audit.json`. A new held-out task needs a
+matching stage function and validation against RoboCasa's success predicate. Preserve
+existing slugs. The current generator supports `--list`, `--cell`, `--emit-all` and
+`--check`; `--check` checks payload boundaries, not primitive coverage.
 
-### Changing groups or trials
+## Build and run
 
-```bash
-python tasks/task02/build_groups.py --list                   # 23 groups, 15 active
-python tasks/task02/build_groups.py --emit "Loading Fridge"  # one group
-python tasks/task02/build_groups.py --trials 5               # rewrite config + [[steps]]
-python tasks/task02/build_groups.py --check
-
-# after a RoboCasa pin bump (needs the RoboCasa venv)
-.venv-robocasa/bin/python tasks/task02/dev/decompose.py --audit \
-    --out tasks/task02/dev/data/task02_primitive_audit.json
-.venv-robocasa/bin/python tasks/task02/build_groups.py --recompute-split
-```
-
-Never delete a `GROUPS` entry: a group's position is its slug number. Mark it
-`active=False` instead. A new held-out task needs a stage function in `stages.py`, and
-every primitive it requires must have a provider in its training set; `--emit` and
-`--check` refuse otherwise.
-
-## Running it
-
-You need a GPU with the NVIDIA Container Toolkit, Docker with compose, `harbor`, and the
-complete merged RoboCasa `models/assets` tree.
+Requires Docker/Compose, an NVIDIA GPU with the Container Toolkit, Harbor and the
+complete merged RoboCasa assets. No perception-model download is required.
 
 ```bash
-make sim-robocasa                  # simulator image + sources + dataset + .venv-robocasa
-make task02                        # emit every group, build the shared image
-make task02-06-setting-the-table   # emit one group (and rebuild the image)
+make sim-robocasa
+make task02-06-setting-the-table             # one representative group
+make task02                                 # all groups, one shared image
+make task02-assets                          # staging without Docker builds
 make task02-clean
 ```
 
-`rlebench prepare task02` runs both steps.
-
-### Evaluate
+`rlebench prepare task02` builds the simulator and task. The image is
+`rlebench-task02-agent:dev`; build-time `AGENT_UID` defaults to 1000 and cannot
+be root.
 
 ```bash
-rlebench run task02/06-setting-the-table -a <agent> -m <model>     # one group
-rlebench run task02 -a <agent> -m <model> -d cuda:0 cuda:1         # every group
-rlebench run task02 -a oracle -d cuda:0                            # the protocol check
+rlebench run task02/06-setting-the-table -a <agent> -m <model>
+rlebench run task02 -a <agent> -m <model> --device cuda:0 cuda:1
+rlebench run task02/06-setting-the-table -a oracle --device cuda:0
 ```
 
-`rlebench run` adds `--override-gpus 0 --yes`, the API-host allowlist and the dataset
-mount, and pins each group to a card via `RLEBENCH_GPU`; `--dry-run` prints the
-`harbor run` lines. By hand:
+The runner supplies GPU placement, the dataset mount, agent-host allowlist and Harbor
+GPU override; `--dry-run` prints the command. Oracle only checks the six-step protocol
+and normally earns zero. It does not establish that a useful transferable harness
+has been learned.
+
+## Results and checks
+
+| Path within a Harbor trial | Contents |
+| --- | --- |
+| `steps/eval_05/verifier/reward.json` | Final cumulative reward, success rate, trial counts and infrastructure failures |
+| `steps/eval_NN/verifier/diagnosis.json` | Ledger/handoff status and optional media/error diagnostics |
+| `steps/eval_NN/verifier/media/` | Best-effort observation videos and index |
+| `steps/develop/artifacts/workspace/agent_harness/` | Development deliverable |
+| `steps/*/agent/` | Separate development/evaluation sessions |
+
+Stage evidence remains in the private ledger; diagnosis JSON does not export stage
+vectors. Inspect `/var/lib/rlebench/{worker,service,verifier}.log` as root while the
+container exists. `rlebench view jobs` shows collected verifier media.
 
 ```bash
-export ROBOCASA_ASSET_DIR=$PWD/third_party/robocasa/robocasa/models/assets
-harbor run -p tasks/task02 -i 06-setting-the-table -a <agent> -m <model> \
-    --override-gpus 0 --yes --allow-agent-host <api host>
-```
-
-`--yes` is needed because the knobs are written as `${VAR:-default}` and Harbor asks
-before letting a task read your shell. The oracle writes a stub harness and walks the
-protocol; expect a near-zero score, and read the diagnosis rather than the reward.
-
-Develop is 8 h and each trial 1 h. Scale one run with `RLEBENCH_TIMEOUT_MULT=0.25` plus
-`--agent-timeout-multiplier 0.25`, both sides together.
-
-### Read the result
-
-Under `jobs/<timestamp>/<task>__<id>/`:
-
-- `steps/eval_05/verifier/reward.json` — the run reward (the last step's cumulative
-  number covers every trial).
-- `steps/eval_NN/verifier/diagnosis.json` — the stage vector per trial, which is what
-  explains the score.
-- `steps/develop/artifacts/workspace/agent_harness/` — the deliverable every evaluation
-  agent inherited.
-- `steps/develop/agent/` and each `steps/eval_NN/agent/` — separate sessions.
-
-### Watching a run live
-
-```bash
-RLEBENCH_DEBUG=1 rlebench run task02/06-setting-the-table -a <agent> -m <model>
-```
-
-writes `status.json` (with `reward_now`, including the stage vector), `events.jsonl`,
-per-episode videos, per-episode harness snapshots and per-episode ground truth under
-`jobs/<ts>/<trial>/debug/` while the run happens. The tree is bind-mounted under
-`/opt/private`, so no agent can read it. `RLEBENCH_DEBUG=1 make task02` additionally
-bakes your uid into the image so the agent's session trace is readable mid-step; build
-without it for a portable image.
-
-## Checking the guarantees
-
-```bash
-ASSETS=-v"$ROBOCASA_ASSET_DIR:/opt/src/robocasa/robocasa/models/assets:ro"
-
-python3 tasks/task02/build_groups.py --check     # dirs, splits and image agree
-python3 tasks/task02/build_assets.py --check     # no held-out name in the agent tree
-docker run --rm -u agent --entrypoint /opt/check_isolation.sh $ASSETS rlebench-task02-agent:dev
+python3 tasks/task02/build_groups.py --check
+python3 tasks/task02/build_assets.py --check
 make test TASK=task02
-MUJOCO_GL=egl .venv-robocasa/bin/python -m pytest -q -m simulator tests/test_toolsmith_*.py
+python3 tests/runtime/container_check.py --family task02 \
+    --group 06-setting-the-table --gpu 0 \
+    --assets third_party/robocasa/robocasa/models/assets \
+    --report /tmp/task02-container.json
 ```
 
-`check_isolation.sh` runs as the agent and asserts that the simulator, the private
-modules, the split, the debug tree and the ledger are unreachable while the client and
-the handoff directory still work. The `simulator`-marked tests assert that every stage
-function agrees with RoboCasa's own predicate against a live environment; re-run them
-after any pin bump, since the stage functions are hand-written mirrors of RoboCasa
-source.
+The real-container check exercises UID isolation, rendering, locking and failure
+recovery. In a started, idle container, run
+`docker exec --user agent <container> python /opt/check_isolation.py`.
+Check GPU/assets for startup failures, close the lease owner for `busy`, and inspect
+private worker logs for `sim_error`. Keep a vision-capable agent setup: camera access
+is part of the task.
 
-## Known limits
-
-- The reward takes `conjuncts x trials + 1` distinct values, so the held-out task's
-  conjunct count sets the resolution. Two available conjuncts is the enforced floor.
-- The step cap and the trial clock are sized as a pair; raising one alone only moves
-  which of them ends a trial.
-- Coverage is enforced at build time, but that practising the primitives in three other
-  procedures is enough to recombine them into a fourth is the hypothesis the benchmark
-  tests, not something a check establishes.
-- Trials run sequentially in one container, so a full run is 8 h plus five trial hours.
+Primitive coverage does not establish that three procedures suffice to learn a
+transferable harness; that is the benchmark's hypothesis. Step caps and wall clocks
+both constrain attempts, and trials run sequentially in the shared container.

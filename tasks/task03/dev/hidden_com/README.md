@@ -1,7 +1,7 @@
 # Hidden center-of-mass development tools
 
 The runnable single-stage task is emitted by `make task03-assets`.
-See [the task README](../../_template/hidden_com/README.md) for its interface,
+See [the task README](../../README.md) for its interface,
 private simulator boundary, build commands and Oracle run.
 
 Render the shared scene using the pinned simulator environment:
@@ -16,7 +16,7 @@ sheet, portable XML/assets, and mass/COM and repeatability checks. Load the
 `preview` keyframe to inspect the initial pose. XML contains private inertia
 and is only for maintainers.
 
-`check_isolation.py` runs inside a running task image as the `agent` user.
-It checks protected-file reads/writes, private imports, root-only operations,
-and the public observation allowlist. The physical Oracle regression exercises
-all four hidden quadrants for each of the three mass configurations in `tests/test_tabletop_hidden_com.py`.
+`tests/runtime/container_check.py --family task03 --variant hidden-com
+--task HiddenCOM --report /tmp/hidden-com-check.json` checks the running image,
+including private-file isolation as the agent user. Host-side physics checks
+live in `tests/runtime/test_hidden_scene.py`.

@@ -31,7 +31,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .. import protocol as P
+from .. import perception_protocol as P
 
 DEFAULT_SOCKET = os.environ.get(
     "RLEBENCH_PERCEPTION_SOCKET", "/run/rlebench/perception.sock"

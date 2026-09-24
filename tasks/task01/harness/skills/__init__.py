@@ -10,11 +10,11 @@ There is no `pick("mug")`: deciding what matters, finding it and choosing how to
 of it is the task. And there is no second execution path -- a primitive's steps are metered
 exactly as yours are, and everything here sees exactly the observation you see.
 
-    from harness.client import SpeedrunClient, ObsSpec
+    from harness.client import SimClient, ObsSpec
     from harness.skills import camera, geometry, perception, transforms
     from harness.skills import reach, grasp, lift, settle
 
-    with SpeedrunClient() as sim:
+    with SimClient() as sim:
         sim.reset()
         obs = sim.observe(ObsSpec(width=512, depth=True))["obs"]
         hits = perception.segment_by_text(obs["robot0_agentview_left_image"], "mug")

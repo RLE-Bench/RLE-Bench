@@ -116,9 +116,9 @@ tasks/taskNN/        one Harbor task family, self-contained; nothing else at
 tasks/task01|02|03|04|05/  additionally emit their task matrices from _template/
                      via build_levels.py / build_groups.py / build_tasks.py /
                      build_subtasks.py.
-                     task03 owns only its tabletop/ layer; its harness/ is the
-                     gitignored merge of task01's speedrun package (stored
-                     once) with tabletop staged as harness.tabletop
+                     task01/02/03 each own their harness/runtime/ source.
+                     task03 stages its domain physics from tabletop/ into
+                     the private harness.tabletop package.
 third_party/         GITIGNORED vendoring, one subdir per sim layer: robosuite
                      + robocasa + the ~15 GB dataset, perception, motiontrack,
                      libero (the encoder bundles), robotwin, task05 (the data

@@ -23,9 +23,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Build missing family payloads before collection on a fresh checkout.
 GENERATED_TASK_DIRS = {
-    "task01": ("harness/eval_video.py",),
-    "task02": ("harness/eval_video.py",),
-    "task03": ("harness",),
     "rgb-only": ("environment/agent", "environment/private",
                 "tests/harness/assets", "solution/payload"),
     "rgb-depth": ("environment/agent", "environment/private",
@@ -92,9 +89,5 @@ def pytest_sessionstart(session):
         print(f"\n[conftest] {task}: regenerating {missing} via {source}",
               flush=True)
         command = [sys.executable, script]
-        if task == "task03":
-            command.append("--host-pkg")
-        elif task in ("task01", "task02"):
-            command.append("--sync-shared")
         subprocess.run(command, cwd=REPO, check=True)
         built.add(script)
