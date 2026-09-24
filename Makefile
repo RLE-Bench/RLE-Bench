@@ -85,6 +85,7 @@ AGENT_UID ?= 1000
 else
 AGENT_UID ?= $(shell u=$$(id -u); if [ "$$u" -eq 0 ]; then echo 1000; else echo $$u; fi)
 endif
+export AGENT_UID
 
 task01-assets:
 	python3 tasks/task01/build_levels.py --emit-all
@@ -117,65 +118,27 @@ task03-assets:
 task06-assets task07-assets task08-assets task09-assets: task%-assets:
 	$(PY) tasks/task$*/build_assets.py
 
-# task01: one image per harness level, rlebench-task01-l{1,2,3}-agent:dev (the level decides
-# what the agent's uid can read). L1 is the control condition: it selects the empty
-# model stage, so it needs neither the perception models nor the HF token.
+# Task-owned runtime images. Task generators choose the cells to emit.
 TASK01_LEVELS ?= L1 L2 L3
+TASK_CELLS ?=
 PERCEPTION_VENDOR ?= $(CURDIR)/third_party/perception
-task01_models = $(if $(filter L1,$(1)),--build-arg MODELS=models-off,\
-    --build-arg MODELS=models-on \
-    --build-arg TORCH_VERSION=$(TORCH_VERSION) \
-    --build-arg SAM3_SHA=$(SAM3_SHA) \
-    --build-arg CGN_SHA=$(CGN_SHA) \
-    --build-context perception=$(PERCEPTION_VENDOR))
 
-# The model fetch comes before the loop: a missing token must stop the run in a
-# second, not after L1's image is built. `setup` is a no-op once the tree is complete.
-task01: task01-assets
-	@if [ -n "$(filter-out L1,$(TASK01_LEVELS))" ]; then sim/perception/perception.sh setup; fi
-	@for l in $(TASK01_LEVELS); do \
-	    echo "==> building rlebench-task01-$$l-agent"; \
-	    $(MAKE) --no-print-directory task01-$$l || exit 1; \
+task01:
+	@for level in $(TASK01_LEVELS); do \
+	    RLEBENCH_PERCEPTION_SOURCE=$(PERCEPTION_VENDOR) python3 tasks/task01/build_levels.py --emit $$level $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build || exit 1; \
 	done
-	@echo "built every task01 level image, agent uid $(AGENT_UID)"
 
-# One level. The tag is lowercased because a Docker repository name must be.
 task01-%:
-	python3 tasks/task01/build_levels.py --emit $*
-	@if [ "$*" != "L1" ]; then sim/perception/perception.sh setup; fi
-	@tag=$$(echo $* | tr A-Z a-z); \
-	docker build -t rlebench-task01-$$tag-agent:dev \
-	    --build-arg SIM_IMAGE=$(ROBOCASA_SIM_IMAGE) \
-	    --build-arg AGENT_UID=$(AGENT_UID) \
-	    --build-arg LEVEL=$* \
-	    $(call task01_models,$*) \
-	    tasks/task01/images/$* \
-	&& echo "built rlebench-task01-$$tag-agent:dev, agent uid $(AGENT_UID)"
+	RLEBENCH_PERCEPTION_SOURCE=$(PERCEPTION_VENDOR) python3 tasks/task01/build_levels.py --emit $* $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build
 
-# task02: one image for every activity group, rlebench-task02-agent:dev; the group is
-# selected per task.toml (RLEBENCH_GROUP).
-task02: task02-assets
-	docker build -t rlebench-task02-agent:dev \
-	    --build-arg SIM_IMAGE=$(ROBOCASA_SIM_IMAGE) \
-	    --build-arg AGENT_UID=$(AGENT_UID) tasks/task02/image
-	@echo "built rlebench-task02-agent:dev from $(ROBOCASA_SIM_IMAGE), agent uid $(AGENT_UID)"
+task02:
+	python3 tasks/task02/build_groups.py $(if $(TASK_CELLS),--cell $(TASK_CELLS),--emit-all) --build
 
-# One group: `make task02-03-setting-the-table` (emits it, rebuilds the shared image).
 task02-%:
-	python3 tasks/task02/build_groups.py --emit $*
-	docker build -t rlebench-task02-agent:dev \
-	    --build-arg SIM_IMAGE=$(ROBOCASA_SIM_IMAGE) \
-	    --build-arg AGENT_UID=$(AGENT_UID) tasks/task02/image
+	python3 tasks/task02/build_groups.py --emit $* --build
 
-# task03: standalone robosuite, with no perception models or dataset.
-task03: task03-assets
-	docker build -t rlebench-task03-agent:dev \
-	    --build-arg ROBOSUITE_SHA=$(ROBOSUITE_SHA) \
-	    --build-arg AGENT_UID=$(AGENT_UID) \
-	    tasks/task03/image
-	docker build -t rlebench-task03-pocket-agent:dev tasks/task03/04-rubik-cube/environment
-	docker build -t rlebench-task03-hidden-com-agent:dev tasks/task03/05-hidden-center-of-mass/environment
-	@echo "built task03 images, agent uid $(AGENT_UID)"
+task03:
+	python3 tasks/task03/build_levels.py $(if $(TASK_CELLS),--cell $(TASK_CELLS),--emit-all) --build
 
 # task04: the agent + verifier pair, built from the repo root with the LAFAN1 clips
 # and G1 meshes inside (sim-motiontrack first); the five task directories share them.
@@ -205,7 +168,7 @@ task08 task09: task%: task%-assets
 # The generated trees per family (what .gitignore lists), then the images by tag.
 CLEAN_task01 := tasks/task01/L[0-9] tasks/task01/images
 CLEAN_task02 := tasks/task02/[0-9][0-9]-* tasks/task02/image
-CLEAN_task03 := tasks/task03/[0-9][0-9]-* tasks/task03/image tasks/task03/harness
+CLEAN_task03 := tasks/task03/[0-9][0-9]-* tasks/task03/image tasks/task03/image-*
 CLEAN_task04 := tasks/task04/[0-9][0-9]-*
 CLEAN_task05 := tasks/task05/[0-9][0-9]-* third_party/task05
 # The agent and bundle images belong to sim-libero, not to the family: only the

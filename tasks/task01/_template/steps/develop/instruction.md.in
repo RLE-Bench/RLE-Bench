@@ -13,15 +13,17 @@ The simulator is only reachable through a metered client. There is no environmen
 object in your process, and every `env.step` is counted.
 
 ```python
-from harness.client import SpeedrunClient, ObsSpec
+from harness.client import SimClient, ObsSpec
 
-with SpeedrunClient() as sim:
-    info = sim.task_info()      # task, action layout, action_dim, budgets, clock
-    obs = sim.reset()           # start an episode (costs one interaction step)
+with SimClient() as sim:
+    info = sim.task_info()      # action layout, action_dim, budgets, clock
+    obs = sim.reset()["obs"]    # start an episode (costs one interaction step)
     print(sim.status())         # budgets and time remaining (free)
 ```
 
 The simulator serves one connection at a time — close your client before opening another.
+A second connection receives `RemoteError(kind="busy")`; leaving a `with` block
+releases control without resetting the scene.
 
 `sim.task_info()["instruction"]` is the natural-language goal for the current
 episode, produced by the simulator itself. Read it — it names the specific object or
@@ -52,7 +54,7 @@ too. The same object shapes a free look and a step, so what you *look* at and wh
 on* cannot disagree:
 
 ```python
-look = sim.observe()                               # frames as the step pipeline made them
+look = sim.observe()                             # task-default image size
 look = sim.observe(ObsSpec(width=384))             # ask for more detail
 img  = look["obs"]["robot0_agentview_left_image"]
 print(look["resolution"], look["max_resolution"], look["live"])
@@ -91,18 +93,26 @@ Each camera is specified by its **vertical field of view**:
 | `robot0_eye_in_hand` | **75°** |
 
 ```python
-f = (H / 2) / math.tan(math.radians(fovy) / 2)     # H = rendered image height, pixels
+f = (H / 2) / math.tan(math.radians(fovy) / 2)     # H = square delivery height, pixels
 ```
 
-`f` is in pixels, so it scales with the size you rendered at. With `cx, cy` the image
+`f` is in pixels; for square deliveries it scales with the delivered image height. With `cx, cy` the image
 centre, a pixel `(u, v)` at z-depth `d` sits at `((u - cx) * d / f, (v - cy) * d / f, d)`
 in that camera's own frame. **Where each camera sits on the robot is yours to measure.**
 
-**Resolution is a real trade, in both directions.** Every step renders and transfers
-whatever you asked for: a bigger `width` costs render plus encode and decode each time,
-depth roughly doubles an observation, and `cameras=()` makes a step dramatically cheaper.
-None of it touches your interaction budget; it is paid in wall clock, which is also a
-budget. A batch renders **once**, for the observation it hands back.
+For rectangular deliveries, use `look["intrinsics"][camera]`: `fx` and `fy`
+scale separately from the 512×512 render, and the principal point is
+`((W - 1) / 2, (H - 1) / 2)`. Deproject with
+`((u - cx) * d / fx, (v - cy) * d / fy, d)`.
+
+
+**Resolution is a real trade, in both directions.** RGB and depth are rendered together
+at 512×512 and cached for the current state. Requested sizes, including rectangles,
+are resized from those frames; requests above 512 per axis are clamped. RGB uses BOX
+filtering and depth uses nearest-neighbor resizing. A bigger delivery costs transfer
+and decoding time; `depth=True` adds depth to the response. `cameras=()` omits images.
+None of it touches your interaction budget; it is paid in wall clock. A batch returns
+one observation at its end. Unknown camera names and invalid sizes are rejected.
 
 ## Actions
 
@@ -124,10 +134,10 @@ rotated differently in each episode, so if you compute a target in world coordin
 you must rotate the error into the base frame before sending it:
 
 ```python
-import robosuite.utils.transform_utils as T
-R = T.quat2mat(obs["robot0_base_quat"])
-action[:3] = R.T @ (target_world - obs["robot0_eef_pos"])   # target_world is YOURS to
-                                                            # estimate, from the cameras
+from scipy.spatial.transform import Rotation
+R = Rotation.from_quat(obs["robot0_base_quat"]).as_matrix()
+action[:3] = R.T @ (target_world - obs["robot0_eef_pos"])
+# target_world is YOURS to estimate from the cameras; quaternions are xyzw.
 ```
 
 Skipping this does not raise an error — the end-effector simply drifts away from the
@@ -140,7 +150,8 @@ against that, not against the commanded one.
 
 ## Acting
 
-`sim.step(actions)` is the whole acting surface.
+`sim.step(actions)` is the whole acting surface. Batches contain 1–200 actions
+and cannot exceed the remaining budget; invalid batches are rejected before movement.
 
 ```python
 res = sim.step(action)          # one action
@@ -154,12 +165,12 @@ res = sim.step([hold] * 15)     # or a batch, applied in order, one round trip
 | `obs` | the observation after the last action applied |
 | `steps` | how many were **applied** — fewer than asked for if the episode ended part-way |
 | `success` | the **environment's** own predicate. Nothing you send can assert it |
-| `episode_over` | the episode or graded trial is finished; only `reset()` starts the next |
+| `episode_over` | the episode or graded trial is finished; reset in development, use `next_trial()` in evaluation |
 | `ended` | why it ended, or `None` while it is alive |
 | `steps_remaining` | interaction budget left; in a graded trial, that trial's remaining steps |
 
 A batch is applied in order and **stops at the first action that ends the episode**, so
-the rest are never applied and never charged. Use one for open-loop stretches (holding
+the rest are never attempted or charged. Every attempted action is charged before dispatch. Use one for open-loop stretches (holding
 the gripper shut, letting the arm settle) where it saves a round trip per step; use
 single actions when you want to look at each result.
 
@@ -177,7 +188,10 @@ as you like — one connection at a time.
 ```python
 res = sim.step(actions)
 if res["episode_over"]:
-    sim.reset()
+    if sim.status()["phase"] == "development":
+        sim.reset()
+    else:
+        sim.next_trial()
 ```
 
 That is the entire control flow. Around it, do whatever the problem needs.
@@ -190,14 +204,17 @@ That is the entire control flow. Around it, do whatever the problem needs.
 | `env_success` | the task's success predicate fired | **no** |
 | `env_done` | the environment stopped | **no** |
 | `horizon` | the episode ran out of steps | **no** |
-| `budget_exhausted` | your interaction budget ran out | **no** |
+| `budget_exhausted` | no interaction budget remains | **no** |
+| `sim_error` | the simulator failed | **no** |
 
 `res["episode_over"]` is the authoritative answer to that last column. An episode and
 a graded trial run to the same step ceiling — `task_info()` reports it, as
-`max_episode_steps` and `max_steps_per_trial` — and a trial that runs out reports
+`max_steps_per_trial` — and a trial that runs out reports
 `horizon` the same way. **Stepping a finished episode or trial
-raises `RemoteError` rather than returning a verdict; only `reset()` starts the next
-one.** `observe()` still works there, but returns a thinner observation with `live`
+raises `RemoteError(kind="episode_over")` rather than returning a verdict.**
+Use `reset()` in development and `next_trial()` in evaluation. To abandon a live
+evaluation trial, call `finish_trial()` first; evaluation `reset()` is unavailable.
+`observe()` still works there, but returns an empty observation with `live`
 False — check it rather than meeting the gap as a `KeyError`.
 
 **Success is always the environment's own predicate.** There is no channel for claiming
@@ -221,8 +238,10 @@ There is no partial credit for being close: when it expires you are cut off exac
 where you stand, with whatever you have not written to disk lost.
 
 Both are reported by `sim.status()` — `steps_remaining` and `seconds_remaining` — and
-they are the real numbers for **this** run, not any default you might assume. Read them
-more than once. They pull in opposite directions and it is easy to watch only one.
+they reflect this run's configured allowances. Read them more than once.
+`seconds_remaining` reports the phase allowance minus time since its first API
+request. Harbor enforces the actual wall-clock deadline, which may arrive earlier.
+The budgets pull in opposite directions and it is easy to watch only one.
 
 ## How you will be scored
 
@@ -249,7 +268,7 @@ Nothing in this phase is scored, so stopping early costs nothing and saves inter
 you judge yourself ready, say so:
 
 ```python
-with SpeedrunClient() as sim:
+with SimClient() as sim:
     print(sim.status()["seconds_remaining"])   # how long you have left
     sim.end_development()                       # your readiness signal
 ```
@@ -259,5 +278,16 @@ moment. It does **not** start the evaluation, spend anything, or touch the simul
 Development interaction is refused afterwards, so call it when you mean it; calling it twice
 is harmless. Letting the clock end the phase instead hands over mid-thought.
 
+After `end_development()`, end your turn so Harbor can advance.
 **You do not start the evaluation — the harness does**, after this phase ends. You carry on
 in the next phase with everything you know, and it begins with the evaluation already open.
+
+## Simulator failures
+
+If `ended` is `sim_error`, the current episode or trial cannot continue. Confirmed
+progress is retained. An action whose result was lost still costs one step;
+`res["steps"]` counts confirmed actions and may be smaller than the budget decrease.
+In development call `reset()` to start another episode. In evaluation call
+`next_trial()` to advance after the trial has ended.
+If the connection is lost, create a new client and inspect `status()` and its
+`last_request` before acting. Never blindly replay a batch whose result was lost.

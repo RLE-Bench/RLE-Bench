@@ -10,7 +10,7 @@ observation:
 | `priv_object_state` | the simulator's own raw pose keys, verbatim |
 
 ```python
-obs = sim.reset()
+obs = sim.reset()["obs"]
 target = obs["priv_target"]["name"]              # e.g. "obj"
 where  = obs["priv_objects"][target]["pos"]      # world frame, metres
 held   = obs["priv_grasp"]["grasping"]

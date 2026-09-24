@@ -7,13 +7,10 @@ HOST_TESTS := tests/test_task_images.py tests/test_rlebench_argv.py tests/test_r
 	tests/test_rlebench_summarize.py tests/test_antigravity_agents.py \
 	tests/test_camera_intrinsics.py tests/test_core_media.py tests/test_rlebench_view.py
 
-TASK_TESTS_task01 := $(wildcard tests/test_speedrun_*.py)
-TASK_TESTS_task02 := $(wildcard tests/test_toolsmith_*.py)
+TASK_TESTS_task01 := tests/runtime
+TASK_TESTS_task02 := tests/runtime
 
-# task03 owns the tabletop prefix, which is also why the harness-composition test
-# is test_tabletop_harness.py and not test_speedrun_*: it belongs to this family,
-# not to the shared harness suite task01 runs.
-TASK_TESTS_task03 := $(wildcard tests/test_tabletop_*.py)
+TASK_TESTS_task03 := tests/runtime
 
 TASK_TESTS_task04 := $(wildcard tests/test_motiontrack_*.py)
 

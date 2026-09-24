@@ -20,7 +20,7 @@ development**: a task reports that its predicate fired, or it reports nothing. T
 readout on the clauses you did satisfy. Most predicates also require the gripper to be
 clear of the objects it moved, so an episode that ends holding one does not fire. A
 practice episode runs to the same step ceiling as the graded trial (`sim.task_info()`
-reports both, as `max_episode_steps` and `max_steps_per_trial`), so a whole procedure fits
+reports it as `max_steps_per_trial`), so a whole procedure fits
 inside one episode — the regime the agent inheriting your harness will be in.
 
 ## Reaching the simulator
@@ -29,23 +29,24 @@ Only through a metered client. There is no environment object in your process, a
 `env.step` is counted.
 
 ```python
-from harness.client import ToolsmithClient
+from harness.client import SimClient
 
-with ToolsmithClient() as sim:
+with SimClient() as sim:
     print(sim.list_tasks())                     # your training set, in full
     info = sim.task_info()                      # action layout, action_dim, budgets, clock
-    obs = sim.reset(task=sim.list_tasks()[0])   # start an episode on one of them
-    print(sim.status())                         # budget, and what you have solved (free)
+    obs = sim.reset(task=sim.list_tasks()[0])["obs"]   # start an episode on one of them
+    print(sim.status())                         # interaction budget and time remaining (free)
 ```
 
 The simulator serves one connection at a time — close your client before opening another.
+A second connection receives `RemoteError(kind="busy")`; leaving a `with` block
+releases control without resetting the scene.
 
-`sim.reset(task=...)` must name one of those tasks on the first reset of the run; after that
-you stay on whatever you last chose until you name another. **A reset costs one
-interaction step**, charged to the task it opens — it re-randomises a kitchen, and it is
-the one thing besides acting that draws on the simulator. Building a kitchen also takes
-20–40 seconds of wall clock and only a few stay resident, so alternating between tasks
-every episode costs wall clock that staying on one does not.
+Use `sim.reset(task=...)` to select a task from `list_tasks()`. Omitting the task
+keeps the current selection, initially the first training task. Reset before your
+first action. **A reset costs one interaction step** — it re-randomises a kitchen.
+Only the current environment is retained, so switching tasks rebuilds the environment
+and costs wall clock. Use `seed=...` when you need a reproducible development episode.
 
 Looking (`sim.observe()`) remains free, in both phases and however often you do it.
 
@@ -73,27 +74,27 @@ have to perceive it from.
 
 `sim.observe()` returns the current observation without stepping anything: no interaction
 budget, no episode ended, and it works in **both** phases. The same `ObsSpec` controls size,
-which cameras, and whether depth comes too, in all three places it is used:
+which cameras, and whether depth comes too, in both observation and action calls:
 
 ```python
-from harness.controller import ObsSpec
+from harness.client import ObsSpec
 
-look = sim.observe()                                # frames as the step pipeline made them
+look = sim.observe()                                # task-default image size
 look = sim.observe(ObsSpec(width=512, depth=True))  # bigger, with depth
 img = look["obs"]["robot0_agentview_left_image"]
 d   = look["obs"]["robot0_eye_in_hand_depth"]       # float32 HxW, metres
 print(d[v, u], look["resolution"], look["max_resolution"], look["live"])
 ```
 
-The same `ObsSpec` shapes what a step gives back. `sim.step()` returns proprioception
-alone unless you ask for more, so a servo loop pays no render at all.
+The same `ObsSpec` shapes what a step gives back. `sim.step()` includes default
+camera images; use `sim.step(action, ObsSpec(cameras=()))` for proprioception alone.
 
 **On depth.** `depth[v, u]` is **z-depth**: the distance from the camera *plane* to
 whatever is at pixel `(u, v)`, measured along the optical axis — *not* the distance along
 that pixel's own ray. The two differ by 1/cos of the angle off the axis, 25% at the edge of
 a wide frame, so a deprojection that assumes range puts its points centimetres off. A pixel
-`(u, v)` at z-depth `d` is at `((u - cx) * d / f, (v - cy) * d / f, d)` in camera
-coordinates.
+`(u, v)` at z-depth `d` is at `((u - cx) * d / fx, (v - cy) * d / fy, d)` in camera
+coordinates, using the returned intrinsic matrix.
 
 ### The lenses, given
 
@@ -107,11 +108,11 @@ rendered at:
 | `robot0_eye_in_hand` | **75°** |
 
 ```python
-f = (H / 2) / math.tan(math.radians(fovy) / 2)      # H = rendered image height, pixels
+f = (H / 2) / math.tan(math.radians(fovy) / 2)      # H = square delivery height, pixels
 ```
 
 The three cameras are not one lens, and `f` is in pixels, so it scales with the size you
-rendered at. `cx, cy` are the image centre. **Where each camera sits on the robot is yours
+delivered at for square images. `cx, cy` are the image centre. **Where each camera sits on the robot is yours
 to measure.**
 
 It is a sensor reading, not object state: it says how far a surface is, never what it is,
@@ -122,14 +123,21 @@ camera near contact.
 than the one you asked for, because there is nothing left to render against — check it
 rather than meeting the gap as a `KeyError` further down.
 
-**What you ask for is paid in wall clock, never in interaction budget** — but it is paid on
-*every step*, because every step renders and transfers it. A bigger `width` costs render plus
-encode and decode each time; `depth=True` roughly doubles an observation and is off unless
-you ask; `cameras=()` — no images at all — makes a step much cheaper.
+**What you ask for is paid in wall clock, never in interaction budget.** RGB and
+depth render together at 512×512 and are cached for the current state. Every requested
+size, including rectangles, is resized from those frames. Requests above 512 per axis
+are clamped; invalid sizes and unknown camera names are rejected. Larger images and
+optional depth cost transfer and decoding time. RGB uses BOX filtering; depth uses
+nearest-neighbor resizing. `cameras=()` omits images entirely.
+
+For rectangular deliveries, use `look["intrinsics"][camera]`: `fx` and `fy`
+scale separately from the 512×512 render, and the principal point is
+`((W - 1) / 2, (H - 1) / 2)`. Deproject with
+`((u - cx) * d / fx, (v - cy) * d / fy, d)`.
 
 ```python
-obs = sim.step(action)["obs"]                     # cheap: no render at all
-obs = sim.step(action, ObsSpec(width=512))["obs"]  # render just this one
+obs = sim.step(action, ObsSpec(cameras=()))["obs"]  # proprioception only
+obs = sim.step(action, ObsSpec(width=512))["obs"]   # images for this result
 ```
 
 ## Actions
@@ -153,8 +161,8 @@ rotated differently in each episode. The observation gives you the end-effector 
 frame:
 
 ```python
-action[:3] = target_base - obs["robot0_base_to_eef_pos"]   # target_base is YOURS to
-                                                           # estimate, from the cameras
+action[:3] = target_base - obs["robot0_base_to_eef_pos"]
+# target_base is YOURS to estimate from the cameras; quaternions are xyzw.
 ```
 
 `robot0_eef_pos` and `robot0_base_pos` are world-frame poses, offered for reference. Mixing
@@ -191,8 +199,8 @@ grasp(sim, target)                                         # metered, your contr
 holding(sim.observe(ObsSpec(cameras=()))["obs"])           # free, and no render
 ```
 
-`/workspace/scratch` is yours for experiments. It is archived with the run but is not on
-`PYTHONPATH` and is not part of the deliverable.
+`/workspace/scratch` is yours for experiments. It is not on `PYTHONPATH`, is not part of the deliverable, and is discarded
+before evaluation. Put anything you need to hand over inside `agent_harness`.
 
 ### Perception
 
@@ -204,9 +212,18 @@ as much perception as one from a picture, and costs no render at all.
 open-vocabulary query is either a rule you fit, or your own eyes on a frame you saved:
 
 ```python
-from harness.perception import save_view
+from pathlib import Path
+import numpy as np
+from PIL import Image
 
-save_view(sim.observe(ObsSpec(width=512, depth=True))["obs"], "/tmp/look")
+obs = sim.observe(ObsSpec(width=512, depth=True))["obs"]
+out = Path("/tmp/look")
+out.mkdir(parents=True, exist_ok=True)
+for key, value in obs.items():
+    if key.endswith("_image"):
+        Image.fromarray(np.asarray(value, dtype=np.uint8)).save(out / f"{key}.png")
+    elif key.endswith("_depth"):
+        np.save(out / f"{key}.npy", np.asarray(value, dtype=np.float32))
 ```
 
 Your inheritor can do that too.
@@ -228,7 +245,8 @@ A list is applied in order and stops at the first action that ends the episode, 
 is what was APPLIED. Use it for open-loop stretches — holding the gripper shut, letting the
 arm settle — where a closed loop buys nothing.
 
-`sim.step` returning without error says only that an action was applied.
+Batches contain 1–200 actions and cannot exceed the remaining budget.
+`sim.step` returning without error alone does not establish task completion.
 
 `ended` says why the episode or trial stopped, and is `None` while it is alive:
 
@@ -238,10 +256,11 @@ arm settle — where a closed loop buys nothing.
 | `env_done`         | the environment stopped                |
 | `horizon`          | the episode ran out of steps           |
 | `budget_exhausted` | your interaction budget ran out        |
+| `sim_error` | the simulator failed; start another episode |
 
 `res["episode_over"]` is the authoritative answer to that last column; when it is true the
 episode is finished and you must `reset()`. **Stepping a finished episode raises
-`EpisodeOver` rather than returning a verdict**, so a controller that keeps going on a
+`RemoteError(kind="episode_over")` rather than returning a verdict**, so a controller that keeps going on a
 dead episode fails as an exception in its caller, not as a `False` it can act on — check
 `episode_over`, or wrap `sim.step` once and have the wrapper return the verdict.
 **Success is always the environment's own predicate** — a controller cannot claim it by
@@ -251,8 +270,10 @@ stopping.
 
 Perception, controllers and the manual, under `/workspace/agent_harness`, which is already on
 `PYTHONPATH` — so an import like `from perception.locate import bounding_box` works from any
-directory in any later step. **Nothing else survives.** If it is not in a file, it does not
-exist.
+directory in any later step. **Only this directory is handed over.** The development
+version is frozen once and restored before each evaluation; evaluation edits do not
+carry forward. Put all runtime dependencies you add inside it, using regular files
+and directories only. Symlinks and special files are rejected.
 
 ### Numbers in a file
 
@@ -269,8 +290,10 @@ each number you measured is a number *about*.
 
 ## Your budgets
 
-Two caps run at once, both reported by `sim.status()`, and both are the real numbers for
-**this** run rather than any default you might assume.
+Two caps run at once, both reported by `sim.status()`. The step counts reflect
+this run's configured budget. `seconds_remaining` reports the phase allowance
+minus time since its first API
+request. Harbor enforces the actual wall-clock deadline, which may arrive earlier.
 
 `steps_used` / `steps_remaining` is interaction: a hard cap, with requests past it refused
 rather than silently truncated, and spending less earns no score. Your training set is
@@ -315,16 +338,26 @@ development only when it is accurate, reliable, and generally useful for solving
 this scenario.
 
 ```python
-with ToolsmithClient() as sim:
-    print(sim.status())        # predicates fired, interaction and seconds left
+with SimClient() as sim:
+    print(sim.status())        # interaction and seconds left
     sim.end_development()      # your readiness signal
 ```
 
 `end_development()` closes this phase and records the interaction you had spent at the moment
 you judged your harness ready. It does **not** start the evaluation or touch the simulator.
 Development interaction is refused afterwards, so call it when you mean it; calling it twice
-is harmless. `tasks_solved` counts an environment predicate firing, not a scene that looked
-close.
+is harmless. Track `res["success"]` yourself while practising; it records the
+environment predicate, not a scene that merely looked close.
 
+After `end_development()`, end your turn so Harbor can advance.
 **You do not start the evaluation — the harness does**, after this phase ends, and you will
 not see it. Nothing outside `/workspace/agent_harness` reaches the agent who does.
+
+## Simulator failures
+
+If `ended` is `sim_error`, the current episode or trial cannot continue. Confirmed
+progress is retained. An action whose result was lost still costs one step;
+`res["steps"]` counts confirmed actions and may be smaller than the budget decrease.
+Call `reset()` to start another development episode.
+If the connection is lost, create a new client and inspect `status()` and its
+`last_request` before acting. Never blindly replay a batch whose result was lost.

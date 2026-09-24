@@ -7,8 +7,8 @@ conjuncts scores what a run that never moved scores. On tasks this hard that put
 agent on the same number and ranks nothing.
 
 So the evaluation task gets a function below re-implementing the conjuncts of its
-`_check_success` INDIVIDUALLY. Two properties hold, both asserted against a live
-environment by `tests/test_toolsmith_stages.py`:
+`_check_success` INDIVIDUALLY. The stage arithmetic is covered by `tests/runtime/test_stage_credit.py`.
+The intended properties are:
 
   EQUIVALENCE   all stages true at once  <=>  env._check_success() is True. A solved
                 trial scores exactly 1.0 and the environment's predicate stays the sole
@@ -31,8 +31,7 @@ GROUND TRUTH, NOT AGENT REPORT. Everything here reads simulator state directly, 
 root-only tree, and the agent never sees this module or any value it produces (CLAUDE.md
 invariant #1).
 
-MAINTENANCE. A hand-written mirror of RoboCasa source. The equivalence test is the
-tripwire for an upgrade moving them apart.
+MAINTENANCE. These functions mirror RoboCasa source; audit them after pin changes.
 """
 
 from __future__ import annotations

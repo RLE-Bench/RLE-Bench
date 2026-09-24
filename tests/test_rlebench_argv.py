@@ -35,7 +35,8 @@ IN_TREE_ASSETS = str(REPO / "third_party" / "robocasa" / "robocasa" / "models" /
 @pytest.fixture(scope="session", autouse=True)
 def _matrices_emitted():
     for probe, emitter, args in _EMITTERS:
-        if not (REPO / probe).is_dir():
+        if probe == "tasks/task01/L1" or not (REPO / probe).is_dir():
+            # A selected-cell build may leave this level only partly emitted.
             subprocess.run([sys.executable, emitter, *args], cwd=REPO, check=True)
 
 

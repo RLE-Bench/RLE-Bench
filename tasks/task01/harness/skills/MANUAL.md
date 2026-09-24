@@ -16,7 +16,7 @@ take hold of it is the task — these are the parts you would otherwise have wri
 ## The tiers
 
 ```python
-from harness.client import SpeedrunClient, ObsSpec
+from harness.client import SimClient, ObsSpec
 from harness.skills import camera, geometry, perception, transforms
 from harness.skills import reach, move_eef, grasp, release, lift, move_base, settle
 ```
@@ -111,7 +111,7 @@ because that allowance is your budget — `max_steps` is a ceiling, not a plan.
 | `outcome` | `"reached"`, `"gave_up"` or `"blocked"` — the skill's own opinion |
 | `steps` | interaction it spent, charged to your budget. `0` if it needed none |
 | `success` | **the environment's** predicate, never the skill's. `None` if no step was taken |
-| `episode_over` | you must `sim.reset()`; the episode cannot be continued |
+| `episode_over` | the episode cannot continue; reset in development, or advance with `next_trial()` in evaluation |
 | `ended` | why the episode ended, or `None` while it is alive |
 | `pos_err`, `rot_err` | the servo's final errors, metres and radians |
 | `gap` | after `grasp`/`release`: the finger opening, metres. An empty hand closes to ~6 mm; more means SOMETHING is between the pads — not proof it is the right thing |
@@ -145,14 +145,15 @@ an already-finished episode, it returns `blocked` without acting.
 ## Worked example — and it is a demonstration, not a solution
 
 ```python
-from harness.client import SpeedrunClient, ObsSpec
+from harness.client import SimClient, ObsSpec
 from harness.skills import camera, geometry, perception
 from harness.skills import reach, grasp, lift, settle
 
 CAM = "robot0_agentview_left"
 
-with SpeedrunClient() as sim:
-    sim.reset()
+with SimClient() as sim:
+    if sim.status()["phase"] == "development":
+        sim.reset()
     look = sim.observe(ObsSpec(width=256, depth=True))
     obs = look["obs"]
 

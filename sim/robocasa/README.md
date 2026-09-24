@@ -64,7 +64,7 @@ host-side experiment need:
 
 ```sh
 make sim-robocasa                    # image + third_party/ + .venv-robocasa (~15 GB download)
-.venv-robocasa/bin/python -m pytest -q tests/test_toolsmith_*.py
+MUJOCO_GL=egl make test TASK=task02 PY=.venv-robocasa/bin/python
 ```
 
 Idempotent — it reuses the venv, re-points the editable installs and skips a dataset
@@ -96,9 +96,8 @@ quotes.
 
 Bump deliberately. robosuite `master` and robocasa `main` both move, so a branch
 name is not a pin, and task02's stage functions are hand-written mirrors of
-RoboCasa source — re-run `tests/test_toolsmith_stages.py` (the `simulator`-marked
-tests) after any bump. That suite is the tripwire for an upgrade silently moving
-what the reward measures.
+RoboCasa source — re-run `tests/runtime/test_stage_credit.py` with `RLEBENCH_TEST_TASK=task02` after any bump. Also audit the mirrored predicates against the new source before accepting
+the pin change.
 
 ## The asset dataset
 

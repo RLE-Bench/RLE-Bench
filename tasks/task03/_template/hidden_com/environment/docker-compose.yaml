@@ -1,9 +1,0 @@
-services:
-  main:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['${RLEBENCH_GPU:-0}']
-              capabilities: [gpu]

@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from . import protocol as P
+from . import perception_protocol as P
 
 SOCKET = "/run/rlebench/perception.sock"
 
@@ -41,6 +41,10 @@ _GPU = threading.Lock()      # one model at a time: two forwards race for GPU me
 
 def _device() -> str:
     import torch
+    import random
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
 
     return "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -198,6 +202,7 @@ def serve(path: str = SOCKET, once: bool = False) -> None:
     server.listen(8)
     while True:
         conn, _ = server.accept()
+        conn.settimeout(30)
         try:
             msg = P.LineReader(conn).read()
             if msg is None:
@@ -208,9 +213,9 @@ def serve(path: str = SOCKET, once: bool = False) -> None:
                 # Never die on a bad request: the agent can send anything, and a
                 # perception service that fell over would take the rest of the run with
                 # it while looking like a harness fault.
-                reply = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                reply = {"ok": False, "error": "perception request failed"}
             P.send(conn, reply)
-        except (ConnectionError, OSError):
+        except (ConnectionError, OSError, ValueError, P.ProtocolError):
             pass
         finally:
             conn.close()

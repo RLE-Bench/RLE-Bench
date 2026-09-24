@@ -22,6 +22,9 @@ have no memory of that session and no way to ask about it. `/workspace/agent_har
 `PYTHONPATH`, so an import like `from perception.locate import bounding_box` works from any
 directory.
 
+Each evaluation starts from the same frozen development files. Your changes in this
+workspace are discarded before the next evaluation.
+
 Nothing obliges you to use only what is there. You may write your own primitives and
 controllers, and refit an inherited one that does not hold in this kitchen.
 
@@ -35,17 +38,19 @@ about where a skill was actually validated.
 The task is already open — you do not need to start it:
 
 ```python
-from harness.client import ToolsmithClient
+from harness.client import SimClient
 
-with ToolsmithClient() as sim:
-    trial = sim.trial_info()
+with SimClient() as sim:
+    trial = sim.task_info()
     print(trial["instruction"])     # what you have been asked to do
     print(sim.status())             # time remaining
 ```
 
 The simulator serves one connection at a time — close your client before opening another.
+A second connection receives `RemoteError(kind="busy")`; leaving a `with` block
+releases control without resetting the scene.
 
-`trial_info()["instruction"]` is your goal, produced by the simulator. **It is the whole
+`task_info()["instruction"]` is your goal, produced by the simulator. **It is the whole
 brief** — it names the specific objects and fixtures, and will usually describe several
 things that all have to be true at the end.
 
@@ -56,7 +61,7 @@ and ends nothing. You arrive knowing nothing about this kitchen, and looking is 
 thing here that costs no attempt.
 
 ```python
-from harness.controller import ObsSpec
+from harness.client import ObsSpec
 
 look = sim.observe(ObsSpec(width=384))
 img = look["obs"]["robot0_agentview_left_image"]
@@ -76,8 +81,9 @@ thinner than the one you asked for.
 
 The lenses, if you deproject a pixel yourself: `robot0_agentview_left` and `_right` are
 **fovy 60°**, `robot0_eye_in_hand` is **fovy 75°**, and `f = (H/2) / tan(fovy/2)` for the
-height `H` you rendered at. Where the cameras sit on the robot is a measurement your manual
-may carry.
+height `H` of a square delivery. Where the cameras sit on the robot is a measurement your manual
+may carry. All images resize a 512×512 render; for rectangular deliveries,
+use the returned `look["intrinsics"][camera]` for separate `fx` and `fy`.
 
 An inherited primitive is a pure function of an observation, so a claim the manual makes
 about one can be **run** here before you spend a step on it — and a proprioceptive one
@@ -86,9 +92,18 @@ this image and no network, so the open-vocabulary channel is your own eyes on a 
 frame:
 
 ```python
-from harness.perception import save_view
+from pathlib import Path
+import numpy as np
+from PIL import Image
 
-save_view(sim.observe(ObsSpec(width=512, depth=True))["obs"], "/tmp/look")
+obs = sim.observe(ObsSpec(width=512, depth=True))["obs"]
+out = Path("/tmp/look")
+out.mkdir(parents=True, exist_ok=True)
+for key, value in obs.items():
+    if key.endswith("_image"):
+        Image.fromarray(np.asarray(value, dtype=np.uint8)).save(out / f"{key}.png")
+    elif key.endswith("_depth"):
+        np.save(out / f"{key}.npy", np.asarray(value, dtype=np.float32))
 ```
 
 ## Acting
@@ -102,8 +117,8 @@ res = sim.step([hold] * 15)     # fifteen, one round trip, charged as fifteen
 `sim.step` is **the only way to act** — the same one the harness was built through. It does
 not reset, so controllers chain inside the one attempt. Action dim 6 is absolute and
 re-asserted every step: a `0` there commands the gripper open rather than leaving it alone,
-so an action that omits it drops what you are carrying. `obs` is proprioception unless an
-`ObsSpec` asks for more. A list of actions is applied in order and stops at the first that
+so an action that omits it drops what you are carrying. `obs` includes default camera images; use
+`ObsSpec(cameras=())` for proprioception only. A list of actions is applied in order and stops at the first that
 ends the attempt, so `steps` is what was APPLIED, and `ended` says why.
 
 The loop is perceive, act, check:
@@ -120,21 +135,24 @@ world frame**. `robot0_base_to_eef_pos` gives the end-effector in that same fram
 `robot0_eef_pos` is world-frame, and mixing it into an action raises no error — the
 end-effector simply drifts away from the goal.
 
-Every step renders and transfers whatever the controller's `ObsSpec` requests, and that is
-paid in this phase's wall clock.
+Batches contain 1–200 actions and cannot exceed the remaining budget. Rendering,
+transfer, and decoding are paid in this phase's wall clock. All requested image
+sizes are resized from a 512×512 render; requests above 512 per axis are clamped.
 
 ## How the attempt ends
 
 | ending | what happens |
 |---|---|
-| you call `sim.reset()` | you have given up; the attempt is scored where it stands |
+| you call `sim.finish_trial()` | you have given up; the attempt is scored where it stands |
 | the environment stops | the success condition fired, or the episode finished |
 | the step limit | the attempt ran out of steps |
+| the simulator fails | the attempt ends with `sim_error`; confirmed progress is retained |
 | your time runs out | scored where it stands |
 
 `res["episode_over"]` tells you the attempt is finished. Once it is, there is nothing more to
-drive — `step` raises `EpisodeOver` rather than returning a verdict, and **there is no next
-task for you**: the next is someone else's. `sim.reset()` is a give-up move, not a restart.
+drive — `step` raises `RemoteError(kind="episode_over")` rather than returning a verdict, and **there is no next
+task for you**: the next is someone else's. `finish_trial()` is the give-up move. `reset()` and `next_trial()` are
+unavailable; when the attempt ends, end your turn. Harbor opens the next step.
 
 ## What counts as done
 
@@ -149,3 +167,15 @@ stop.
 `sim.status()["seconds_remaining"]` is this phase's wall clock, and the attempt is scored
 where it stands when it ends. Nothing is saved by finishing early, and an attempt that was
 never driven scores the same as one that was driven and failed.
+
+`seconds_remaining` reports the phase allowance minus time since its first API
+request. Harbor enforces the actual wall-clock deadline, which may arrive earlier.
+
+## Simulator failures
+
+If `ended` is `sim_error`, the current episode or trial cannot continue. Confirmed
+progress is retained. An action whose result was lost still costs one step;
+`res["steps"]` counts confirmed actions and may be smaller than the budget decrease.
+If `sim_error` ends this attempt, end your turn; Harbor opens the next step.
+If the connection is lost, create a new client and inspect `status()` and its
+`last_request` before acting. Never blindly replay a batch whose result was lost.
