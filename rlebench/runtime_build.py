@@ -298,7 +298,15 @@ def main(family=None):
             command = ["docker", "build", "-t", image_tag(family, level, variant),
                        "--build-arg", "AGENT_UID="+os.environ.get("AGENT_UID", "1000")]
             if family == "task01" and level != "L1":
-                source = Path(os.environ.get("RLEBENCH_PERCEPTION_SOURCE", ROOT / "third_party/perception"))
+                source = Path(os.environ.get("RLEBENCH_PERCEPTION_SOURCE") or
+                              os.environ.get("RLEBENCH_PERCEPTION_VENDOR") or
+                              ROOT / "third_party/perception").resolve()
+                result = subprocess.run(
+                    [str(ROOT / "sim/perception/perception.sh"), "setup"],
+                    env={**os.environ, "RLEBENCH_PERCEPTION_VENDOR": str(source)},
+                )
+                if result.returncode:
+                    raise SystemExit(result.returncode)
                 command += ["--build-context", "perception="+str(source)]
                 model_pins = dict(line.split("=", 1) for line in (ROOT / "sim/perception/pins.env").read_text().splitlines() if line and not line.startswith("#"))
                 for name in ("TORCH_VERSION", "SAM3_SHA", "CGN_SHA"):

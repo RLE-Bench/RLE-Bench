@@ -44,7 +44,7 @@ sim-robocasa:
 
 # SAM3 + Contact-GraspNet under third_party/perception; the gated weights need HF_TOKEN (task01 L2/L3)
 sim-perception:
-	sim/perception/perception.sh setup
+	RLEBENCH_PERCEPTION_VENDOR="$(PERCEPTION_VENDOR)" sim/perception/perception.sh setup
 
 # G1 model + LAFAN1 clips + .venv-motiontrack (task04)
 sim-motiontrack:
@@ -121,15 +121,15 @@ task06-assets task07-assets task08-assets task09-assets: task%-assets:
 # Task-owned runtime images. Task generators choose the cells to emit.
 TASK01_LEVELS ?= L1 L2 L3
 TASK_CELLS ?=
-PERCEPTION_VENDOR ?= $(CURDIR)/third_party/perception
+PERCEPTION_VENDOR ?= $(if $(RLEBENCH_PERCEPTION_VENDOR),$(RLEBENCH_PERCEPTION_VENDOR),$(CURDIR)/third_party/perception)
 
 task01:
 	@for level in $(TASK01_LEVELS); do \
-	    RLEBENCH_PERCEPTION_SOURCE=$(PERCEPTION_VENDOR) python3 tasks/task01/build_levels.py --emit $$level $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build || exit 1; \
+	    RLEBENCH_PERCEPTION_SOURCE="$(PERCEPTION_VENDOR)" python3 tasks/task01/build_levels.py --emit $$level $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build || exit 1; \
 	done
 
 task01-%:
-	RLEBENCH_PERCEPTION_SOURCE=$(PERCEPTION_VENDOR) python3 tasks/task01/build_levels.py --emit $* $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build
+	RLEBENCH_PERCEPTION_SOURCE="$(PERCEPTION_VENDOR)" python3 tasks/task01/build_levels.py --emit $* $(if $(TASK_CELLS),--cell $(TASK_CELLS)) --build
 
 task02:
 	python3 tasks/task02/build_groups.py $(if $(TASK_CELLS),--cell $(TASK_CELLS),--emit-all) --build
