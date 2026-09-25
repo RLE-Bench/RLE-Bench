@@ -204,7 +204,6 @@ def test_agent_host_lane_task01_with_gpu_pool(monkeypatch):
         "--allow-agent-host", "api.openai.com",
         "--ak", "web_search=disabled",
         "--override-gpus", "0", "--yes",
-        "--resume-trajectory",
     ]
     assert [i.env["RLEBENCH_GPU"] for i in invs[:4]] == ["0", "1", "0", "1"]
     assert inv.env["RLEBENCH_DEBUG"] == "1"

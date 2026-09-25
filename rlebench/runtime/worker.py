@@ -1,5 +1,6 @@
 """Single-threaded simulator process. Its stdout is reserved for private IPC."""
 import ctypes
+import faulthandler
 import importlib
 import os
 import signal
@@ -14,8 +15,10 @@ def main():
     ctypes.CDLL(None).prctl(1, signal.SIGKILL)  # Die with the supervisor, including native hangs.
     if parent == 1 or os.getppid() != parent:
         return
-    output = os.fdopen(os.dup(1), "wb", buffering=0)
+    output = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)  # Simulator imports can print; none of that is protocol data.
+    faulthandler.enable()
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     adapter = None
     def shutdown(*_):
         # Python-level shutdown closes encoders; a native hang is killed by the parent.
@@ -45,6 +48,7 @@ def main():
         if len(data) > P.MAX_REPLY:
             data = P.dumps(dict(ok=False))
         output.write(data)
+        output.flush()
 
 
 if __name__ == "__main__":

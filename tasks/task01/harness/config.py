@@ -154,13 +154,8 @@ INTERACTION_STEPS = 100_000
 SUBMISSIONS = 1
 
 # --- evaluation structure ---------------------------------------------------
-# The agent develops, then evaluates once, and that score is final. Evaluation is not a
-# separate mode: the agent interacts exactly as in development (write or reuse
-# controllers, execute them, take control back on handover). Only two things differ:
-#   * the agent is TOLD it is being evaluated;
-#   * RESET immediately ends and scores the current trajectory.
-# Context and the controller library are INHERITED across trials, and the agent may
-# write new controllers mid-evaluation.
+# Development and evaluation share one agent session. end_development opens the
+# hidden plan; reset is then unavailable. The agent can keep editing its controllers.
 #
 # The plan is pairs of (scene_id, trials_in_that_scene). Scene ids index
 # TARGET_SCENE_IDS, the target split's own (layout, style) pairs, so pinning a scene

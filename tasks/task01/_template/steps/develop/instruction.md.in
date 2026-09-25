@@ -1,4 +1,4 @@
-# RoboCasa speed-run — development phase
+# RoboCasa speed-run — development and evaluation
 
 You are controlling a simulated Franka-class arm on a mobile base in a RoboCasa
 kitchen. The task is **@@ROBOCASA_TASK@@** — @@GOAL@@. Your goal in this phase is to
@@ -222,26 +222,21 @@ it, by design.
 
 ## Save your work to disk
 
-**You keep everything you learn here.** The evaluation phase continues this same session, so
-what you worked out about the task and the scene comes with you. Even so, write your code as
-files in the working directory: it is what you import and run in the next phase.
+**Development and evaluation share one agent session and one time allowance.** Keep your
+code in the working directory and continue using it after switching to evaluation.
 
 ## Two budgets: interaction and time
 
 **Interaction.** `sim.status()` reports `steps_used` and `steps_remaining`. Requests
 past the budget are refused rather than silently truncated. Only development is charged —
-driving your graded trials in the next phase costs none of it. **A reset costs one step**
+driving your graded trials costs none of it. **A reset costs one step**
 as well as each action: it rebuilds a scene, so abandoning an episode is not free.
 
-**Time.** This phase also has a wall clock, and it behaves nothing like the step budget.
-There is no partial credit for being close: when it expires you are cut off exactly
-where you stand, with whatever you have not written to disk lost.
-
-Both are reported by `sim.status()` — `steps_remaining` and `seconds_remaining` — and
-they reflect this run's configured allowances. Read them more than once.
-`seconds_remaining` reports the phase allowance minus time since its first API
-request. Harbor enforces the actual wall-clock deadline, which may arrive earlier.
-The budgets pull in opposite directions and it is easy to watch only one.
+**Time.** You have one shared allowance, nine hours by default. Development and evaluation
+both use it. Calling `end_development()` does not restart the clock, so leave time to
+complete the evaluation trials. `sim.status()["seconds_remaining"]` reports the configured
+allowance minus time since the first API request. Harbor enforces the session deadline,
+which may arrive earlier. Unreached evaluation trials score zero.
 
 ## How you will be scored
 
@@ -264,23 +259,49 @@ cheaper one wins.
 
 ## When you are ready
 
-Nothing in this phase is scored, so stopping early costs nothing and saves interaction. When
-you judge yourself ready, say so:
+Call `end_development()` to freeze your development interaction count and reset the
+simulator into the first hidden evaluation trial. This costs no interaction. Keep working
+in the same session; do not end your turn at this transition.
 
 ```python
 with SimClient() as sim:
-    print(sim.status()["seconds_remaining"])   # how long you have left
-    sim.end_development()                       # your readiness signal
+    sim.end_development()
+    trial = sim.task_info()  # waits for the evaluation scene to be ready
+    print(trial["instruction"])
+    obs = sim.observe()["obs"]
 ```
 
-`end_development()` closes this phase and records the interaction you had spent at that
-moment. It does **not** start the evaluation, spend anything, or touch the simulator.
-Development interaction is refused afterwards, so call it when you mean it; calling it twice
-is harmless. Letting the clock end the phase instead hands over mid-thought.
+The transition is permanent. Repeating `end_development()` does not restart a trial.
+While the scene loads, `status()` reports `phase="evaluation"` and `ready=False`.
+`task_info()` and `observe()` wait for initialization.
 
-After `end_development()`, end your turn so Harbor can advance.
-**You do not start the evaluation — the harness does**, after this phase ends. You carry on
-in the next phase with everything you know, and it begins with the evaluation already open.
+## Evaluation
+
+There are several trials in unseen kitchens. `status()["total_trials"]` reports the count.
+Use the same observation and action APIs, read each trial's instruction, and drive it
+until `episode_over` is true. Evaluation actions do not change development interaction
+usage. Each trial has the action cap reported by `task_info()["max_steps_per_trial"]`.
+
+`reset()` is unavailable in evaluation. `finish_trial()` gives up on the current trial
+and retains its confirmed result. A trial also ends on success, its step limit, the
+environment's termination condition, or `sim_error`. Stepping an ended trial raises
+`RemoteError(kind="episode_over")`.
+
+Call `next_trial()` only after the current trial ends. It opens the next trial; after the
+last one it reports `phase="finished"`. Read the new instruction and observation before
+acting. An unreached trial scores zero.
+
+```python
+res = sim.step(actions)
+if res["episode_over"]:
+    status = sim.next_trial()
+    if status["phase"] != "finished":
+        print(sim.task_info()["instruction"])
+        obs = sim.observe()["obs"]
+```
+
+End your turn when `status()["phase"]` is `"finished"`. Ending the session earlier
+scores only the evaluation evidence already collected; ending during development scores zero.
 
 ## Simulator failures
 

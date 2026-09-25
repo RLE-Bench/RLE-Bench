@@ -90,8 +90,8 @@ reflects the implemented scorer. The old README's
 
 ## Isolation, recovery and layout
 
-The family owns its [harness/](harness/) source, including the broker/worker runtime
-also used in task01/02. Domain physics in [tabletop/](tabletop/) is staged privately
+The family owns its [harness/](harness/) adapters and shares the
+[broker/worker runtime](../../rlebench/runtime/) with task01/02. Domain physics in [tabletop/](tabletop/) is staged privately
 as `harness.tabletop`; it is not assembled from task01 at build time.
 
 The root broker records charges before dispatch and confirmed evidence afterwards
@@ -105,7 +105,8 @@ the agent. Only public client/protocol code, documentation and variant-specific
 helpers enter `/opt/rlebench`. Hidden masses, seeds and scoring stay private.
 
 ```text
-harness/                 tracked client, task configuration, adapter and runtime/
+harness/                 tracked client, task configuration and adapter
+../../rlebench/runtime/  shared simulator service and public client
 tabletop/                private scenes, analytic models, budgets, pocket/, hidden_com/
 _template/
   instruction.md.in, tasks.json   tower/cantilever/balance instructions
@@ -162,7 +163,9 @@ infrastructure failures; `verifier/diagnosis.json` reports ledger/handoff status
 `verifier/media/` contains best-effort observation videos and an index. Agent sessions
 are under `agent/`, and collected files under `artifacts/workspace/`.
 `rlebench view jobs` displays results and media. Private logs are under
-`/var/lib/rlebench` while the container exists.
+`/var/lib/rlebench` while the container exists, and exported to `verifier/diagnostics/`
+after the final agent stops. Failure entries in diagnosis JSON identify the operation
+and failure category without exposing private simulator state.
 
 ```bash
 python3 tasks/task03/build_levels.py --check

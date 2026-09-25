@@ -22,5 +22,4 @@ paths = ["tasks/task01/L1", "third_party/robocasa/robocasa/models/assets/ROBOCAS
 [run]
 lane = "agent-host"
 gpu = true
-resume_trajectory = true
 requires_env = ["ROBOCASA_ASSET_DIR"]

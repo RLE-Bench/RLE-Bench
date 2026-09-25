@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.runtime.handoff import copy_regular, freeze
+from rlebench.runtime.handoff import copy_regular, freeze
 
 
 def test_snapshot_cannot_follow_a_private_symlink(tmp_path):
@@ -25,12 +25,9 @@ def test_snapshot_is_frozen_once(tmp_path):
     assert (private/'handoff/MANUAL.md').read_text() == 'development'
 
 
-def test_task_owned_runtime_copies_agree():
+def test_family_backends_agree():
     root = Path(__file__).resolve().parents[2]
     expected = root/'tasks/task01/harness'
     for family in ('task02','task03'):
-        for original in (expected/'runtime').glob('*.py'):
-            assert original.read_bytes() == (root/'tasks'/family/'harness/runtime'/original.name).read_bytes()
         for name in ('backend.py','compat.py'):
             assert (expected/name).read_bytes() == (root/'tasks'/family/'harness'/name).read_bytes()
-    assert not (root/'rlebench/core/runtime').exists()

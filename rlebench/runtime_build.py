@@ -39,8 +39,11 @@ def stage(family, level="L1", variant=""):
     if context.exists():
         shutil.rmtree(context)
     public, private = context / "payload_agent", context / "payload_private"
+    for payload in (public, private):
+        copy_file(ROOT / "rlebench/__init__.py", payload / "rlebench/__init__.py")
     for name in PUBLIC_RUNTIME:
-        copy_file(here / "harness/runtime" / name, public / "harness/runtime" / name)
+        copy_file(ROOT / "rlebench/runtime" / name, public / "rlebench/runtime" / name)
+    copy_tree(ROOT / "rlebench/runtime", private / "rlebench/runtime")
     copy_tree(here / "harness", private / "harness")
     for name in ("__init__.py", "client.py"):
         copy_file(here / "harness" / name, public / "harness" / name)
@@ -76,7 +79,7 @@ def image_tag(family, level="L1", variant=""):
 
 def steps_for(family, count):
     if family == "task01":
-        return [("develop", 28800), ("evaluate", 3600)]
+        return [("develop", 32400)]
     if family == "task02":
         return [("develop", 28800)] + [(f"eval_{i+1:02d}", 3600) for i in range(count)]
     return []
@@ -89,7 +92,7 @@ def task_toml(family, slug, task, level, variant, count):
         head += 'multi_step_reward_strategy = "final"\n'
     head += f'''\n[task]
 name = "rlebench/{family}-{level}-{slug}"
-version = "1.1.0"
+version = "{'1.2.0' if family == 'task01' else '1.1.0'}"
 description = "Metered robot control through a private simulator service."
 [metadata]
 category = "robotics-control"
@@ -111,6 +114,8 @@ RLEBENCH_TIMEOUT_MULT = "${{RLEBENCH_TIMEOUT_MULT:-1.0}}"
 '''
     if family == "task02":
         head += f'RLEBENCH_GROUP = "{slug}"\n'
+    if family == "task01":
+        head += 'RLEBENCH_SESSION_SECONDS = "${RLEBENCH_SESSION_SECONDS:-32400}"\n'
     if family != "task03":
         budget = 100000 if family == "task01" else 75000
         horizon = 1000 if family == "task01" else 5000
@@ -220,6 +225,8 @@ exit 0
                 if name == "develop" else
                 'sim.finish_trial()' if family == "task02" else
                 'sim.task_info()\n    while sim.status()["phase"] != "finished":\n        sim.finish_trial()\n        sim.next_trial()')
+        if family == "task01":
+            code += '\n    while sim.status()["phase"] != "finished":\n        sim.finish_trial()\n        sim.next_trial()'
         (solution / "solve.sh").write_text('#!/bin/sh\ncd /workspace\npython - <<\'PY\'\nfrom harness.client import SimClient, ObsSpec\nwith SimClient() as sim:\n    '+code+'\nPY\n')
         (solution / "solve.sh").chmod(0o755)
     if not steps:
@@ -238,10 +245,13 @@ exit 0
 
 def check(context):
     public = context / "payload_agent"
-    allowed = set(PUBLIC_RUNTIME)
-    actual = {p.name for p in (public / "harness/runtime").glob("*.py")}
+    allowed = {"__init__.py", *(f"runtime/{name}" for name in PUBLIC_RUNTIME)}
+    actual = {p.relative_to(public / "rlebench").as_posix()
+              for p in (public / "rlebench").rglob("*") if p.is_file() and "__pycache__" not in p.parts}
     if actual != allowed:
-        raise ValueError("private runtime entered the public payload")
+        raise ValueError("unexpected shared code in the public payload")
+    if (public / "harness/runtime").exists():
+        raise ValueError("obsolete family runtime in the public payload")
     forbidden = {"task.py", "adapter.py", "backend.py", "compat.py", "stages.py", "config.py"}
     if any(p.name in forbidden for p in public.rglob("*.py")):
         raise ValueError("private family code entered public payload")

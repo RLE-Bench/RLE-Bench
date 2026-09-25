@@ -13,6 +13,7 @@ import traceback
 
 from . import protocol as P
 from .engine import Engine
+from .process import WorkerFailure
 
 FIELDS = {
     "status": set(), "task_info": set(), "list_tasks": set(),
@@ -151,7 +152,7 @@ class Server:
             if (process is not None and process.returncode is not None
                     and self.operation is None and not self.control_lock.locked()
                     and self.engine.s["ready"] and not self.engine.s["episode_over"]):
-                await self.engine.failed()
+                await self.engine.failed(WorkerFailure("exit", operation="idle", returncode=process.returncode))
 
     async def close(self):
         if self.monitor:

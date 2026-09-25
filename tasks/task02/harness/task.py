@@ -1,6 +1,6 @@
 """Private transfer split; only training members are exposed to the client."""
 from . import config as C
-from harness.runtime.capabilities import MOBILE_ACTIONS
+from rlebench.runtime.capabilities import MOBILE_ACTIONS
 
 
 def configuration():

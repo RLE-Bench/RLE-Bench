@@ -8,14 +8,15 @@ assert os.geteuid() != 0
 for path in ('/opt/private', '/opt/src', '/var/lib/rlebench'):
     assert not os.access(path, os.R_OK | os.X_OK), path
 for path in ('/var/lib/rlebench/ledger.sqlite', '/var/lib/rlebench/worker.log',
-             '/var/lib/rlebench/service.log', '/var/lib/rlebench/handoff/MANUAL.md'):
+             '/var/lib/rlebench/service.log', '/var/lib/rlebench/failures.jsonl', '/var/lib/rlebench/handoff/MANUAL.md'):
     try:
         with open(path, 'rb'):
             raise AssertionError('private file readable')
     except (PermissionError, FileNotFoundError):
         pass
 for module in ('robocasa', 'robosuite', 'harness.task', 'harness.adapter', 'harness.config',
-               'harness.runtime.server', 'harness.runtime.store'):
+               'rlebench.runtime.server', 'rlebench.runtime.store', 'rlebench.runtime.engine',
+               'rlebench.runtime.worker', 'rlebench.runtime.scoring', 'rlebench.cli'):
     try:
         importlib.import_module(module)
     except (ImportError, PermissionError):

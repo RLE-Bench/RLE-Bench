@@ -1,9 +1,11 @@
 """Bounded subprocess operations; the parent never loads the simulator."""
 import asyncio
+import json
 import os
 from pathlib import Path
 import signal
 import sys
+import time
 
 from . import protocol as P
 
@@ -14,7 +16,9 @@ STOP_SECONDS = 3
 
 
 class WorkerFailure(RuntimeError):
-    pass
+    def __init__(self, kind="unavailable", **details):
+        super().__init__(kind)
+        self.details = dict(kind=kind, **details)
 
 
 class Worker:
@@ -26,26 +30,45 @@ class Worker:
     async def start(self, module, descriptor):
         with (self.root / "worker.log").open("ab", buffering=0) as log:
             self.process = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "harness.runtime.worker",
+                sys.executable, "-m", "rlebench.runtime.worker",
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=log, start_new_session=True, limit=P.MAX_REPLY + 1,
                 cwd="/", env={**os.environ, "PYTHONSAFEPATH": "1"})
         return await self.call("create", timeout=INITIALIZE_SECONDS, module=module, **descriptor)
 
     async def call(self, op, timeout=None, **fields):
+        started, limit = time.monotonic(), timeout or self.timeout
         try:
-            async with asyncio.timeout(timeout or self.timeout):
+            async with asyncio.timeout(limit):
                 self.process.stdin.write(P.dumps(dict(op=op, **fields)))
                 await self.process.stdin.drain()
                 raw = await self.process.stdout.readline()
-                if not raw or len(raw) > P.MAX_REPLY:
-                    raise WorkerFailure("worker exited")
+                if not raw:
+                    raise WorkerFailure("exit")
+                if len(raw) > P.MAX_REPLY or not raw.endswith(b"\n"):
+                    raise WorkerFailure("protocol")
                 reply = P.loads(raw)
                 if not reply.get("ok"):
-                    raise WorkerFailure("worker operation failed")
+                    raise WorkerFailure("operation")
                 return reply["result"]
-        except (OSError, ValueError, asyncio.TimeoutError) as exc:
-            raise WorkerFailure("worker unavailable") from exc
+        except (WorkerFailure, OSError, ValueError, KeyError, asyncio.TimeoutError) as exc:
+            kind = ("timeout" if isinstance(exc, asyncio.TimeoutError) else
+                    exc.details["kind"] if isinstance(exc, WorkerFailure) else
+                    "transport" if isinstance(exc, OSError) else "protocol")
+            details = dict(operation=op, elapsed_seconds=time.monotonic()-started,
+                           timeout_seconds=limit, returncode=self.process.returncode)
+            if kind == "timeout" and self.process.returncode is None:
+                try:
+                    self.process.send_signal(signal.SIGUSR1)
+                    await asyncio.sleep(.05)  # Let faulthandler flush before worker teardown.
+                except ProcessLookupError:
+                    pass
+            try:
+                with (self.root / "failures.jsonl").open("a") as log:
+                    log.write(json.dumps(dict(kind=kind, **details))+"\n")
+            except OSError:
+                pass
+            raise WorkerFailure(kind, **details) from exc
 
     async def stop(self):
         proc, self.process = self.process, None

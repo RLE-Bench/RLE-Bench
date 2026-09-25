@@ -42,7 +42,8 @@ class Engine:
         if self.mode == "tabletop":
             used, limit = self.s["dev_steps"], self.config["budget"]
         clock = self.s.get("clock")
-        seconds = self.config.get("seconds", {}).get("develop" if development else "evaluate")
+        seconds = self.config.get("seconds", {}).get(
+            "session" if self.mode == "task01" else "develop" if development else "evaluate")
         remaining = max(0., seconds-(time.time()-clock)) if seconds and clock else seconds
         return dict(phase=self.s["phase"], ready=self.s["ready"],
                     episode_over=self.s["episode_over"], ended=self.s["ended"],
@@ -89,13 +90,15 @@ class Engine:
         self.s["progress"] = evidence
         self.save("confirmed", evidence=evidence)
 
-    async def failed(self):
+    async def failed(self, error=None):
         self.s.update(episode_over=True, ready=True, ended="sim_error",
                       failures=self.s["failures"] + 1)
         self.s["pending"] = None
         if self.s["phase"] == "evaluation":
             self.record()
-        self.save("worker_failure")
+        details = getattr(error, "details", None) or dict(kind="unavailable", operation="recovery")
+        self.s.setdefault("failure_details", []).append(dict(trial_index=self.s["trial"], **details))
+        self.save("worker_failure", details=details)
         if self.worker:
             worker, self.worker = self.worker, None
             await worker.stop()
@@ -122,8 +125,8 @@ class Engine:
             self.confirmed(result["evidence"])
             self.s.update(ready=True, episode_over=False)
             self.save("ready")
-        except WorkerFailure:
-            await self.failed()
+        except WorkerFailure as exc:
+            await self.failed(exc)
 
     def start_trial(self):
         self.s.update(ready=False, episode_over=True, ended=None, episode_steps=0, progress={}, pending=None)
@@ -142,8 +145,8 @@ class Engine:
         try:
             self.cached = await self.worker.call("observe", spec=spec)
             return {**self.cached, "live": True, **self.status()}
-        except WorkerFailure:
-            await self.failed()
+        except WorkerFailure as exc:
+            await self.failed(exc)
             return dict(obs={}, live=False, **self.status())
 
     def validate_spec(self, raw):
@@ -192,8 +195,8 @@ class Engine:
                         self.record()
                     self.save("episode_end")
                     break
-            except WorkerFailure:
-                await self.failed()
+            except WorkerFailure as exc:
+                await self.failed(exc)
                 break
         return {**await self.observe(spec), "steps": applied,
                 "success": bool(self.s["progress"].get("success", False))}
@@ -224,8 +227,8 @@ class Engine:
                 self.info = result["info"]
                 self.s.update(episode_steps=0, episode_over=False, ended=None, ready=True)
                 self.confirmed(result["evidence"])
-            except WorkerFailure:
-                await self.failed()
+            except WorkerFailure as exc:
+                await self.failed(exc)
         else:
             await self.open(descriptor)
         self.s["task"] = task
@@ -242,8 +245,8 @@ class Engine:
         if self.worker and self.mode in ("tabletop", "pocket") and str(self.s["trial"]) not in self.s["results"]:
             try:
                 self.confirmed(await self.worker.call("finish", timeout=FINISH_SECONDS))
-            except WorkerFailure:
-                await self.failed()
+            except WorkerFailure as exc:
+                await self.failed(exc)
         self.s.update(episode_over=True, ended=self.s["ended"] or reason)
         if self.s["phase"] == "evaluation":
             self.record()
@@ -293,6 +296,14 @@ class Engine:
     async def finish_step(self, step):
         if step in self.s["finished_steps"]:
             return self.status()
+        if self.mode == "task01" and step == "develop":
+            if self.s["phase"] == "evaluation":
+                await self.finish("step_ended")
+            await self.stop()
+            self.s.update(phase="finished", episode_over=True, ready=True)
+            self.s["finished_steps"].append(step)
+            self.save("step_end", step=step)
+            return self.status()
         if step == "develop" and self.s["phase"] in ("development", "development_closed"):
             await self.stop()
             self.s.update(phase="evaluation", trial=0)
@@ -340,6 +351,13 @@ class Engine:
         if op == "reset":
             return await self.reset(**fields)
         if op == "end_development":
+            if self.mode == "task01":
+                if self.s["phase"] == "development":
+                    await self.stop()
+                    self.s.update(phase="evaluation", trial=0)
+                    self.start_trial()
+                    self.save("development_end")
+                return self.status()
             if self.s["phase"] not in ("development", "development_closed"):
                 raise P.RequestError("development already ended", "wrong_phase")
             self.s["phase"] = "development_closed"

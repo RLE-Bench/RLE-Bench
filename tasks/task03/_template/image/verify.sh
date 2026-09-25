@@ -1,7 +1,7 @@
 #!/bin/sh
 set -u
 cd /
-/usr/local/bin/python -I -c 'import sys; sys.path.insert(0,"/opt/private"); from harness.runtime.verify import main; main()' "$@"
+/usr/local/bin/python -I -c 'import sys; sys.path.insert(0,"/opt/private"); from rlebench.runtime.verify import main; main()' "$@"
 if [ ! -f /logs/verifier/reward.json ]; then
     mkdir -p /logs/verifier
     printf '%s\n' '{"reward":0.0,"infrastructure_failures":1}' > /logs/verifier/reward.json

@@ -1,7 +1,7 @@
 """Private speed-run schedule and public capabilities."""
 import os
 from . import config as C
-from harness.runtime.capabilities import MOBILE_ACTIONS
+from rlebench.runtime.capabilities import MOBILE_ACTIONS
 
 CAMERAS = ["robot0_agentview_left", "robot0_agentview_right", "robot0_eye_in_hand"]
 
@@ -19,7 +19,7 @@ def configuration():
                    level=level, default_resolution=C.OBS_RESOLUTION, mode="task01")
               for _, layout, style, seed in C.eval_trials(task, plan, overrides.get("salt"))]
     return dict(mode="task01", adapter="harness.adapter", train=[task], plan=trials, level=level,
-                seconds=dict(develop=C.env_float("RLEBENCH_DEVELOP_SECONDS",28800), evaluate=C.env_float("RLEBENCH_EVALUATE_SECONDS",3600)),
+                seconds=dict(session=C.env_float("RLEBENCH_SESSION_SECONDS",32400)),
                 budget=C.env_int("RLEBENCH_INTERACTION_STEPS", C.INTERACTION_STEPS),
                 horizon=C.env_int("RLEBENCH_MAX_STEPS_PER_TRIAL", C.MAX_STEPS_PER_TRIAL),
                 public=dict(action_dim=12, cameras=CAMERAS, depth=True, default_resolution=C.OBS_RESOLUTION,

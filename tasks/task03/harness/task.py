@@ -3,7 +3,7 @@ import hashlib
 import os
 
 from .tabletop.budgets import INTERACTION_STEPS
-from harness.runtime.capabilities import MOBILE_ACTIONS
+from rlebench.runtime.capabilities import MOBILE_ACTIONS
 
 TASKS = ("TowerMaxHeight", "CantileverOverhang", "BalanceCoins", "RubikCube", "HiddenCOM")
 

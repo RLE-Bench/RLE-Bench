@@ -200,3 +200,13 @@ def test_cli_groups_jobs_without_averaging_group_means(tmp_path, capsys, monkeyp
     write(bad, {"schema_version": 2, "runs": []})
     with pytest.raises(SystemExit, match="version 1"):
         cli.main(["summarize", str(bad)])
+
+
+def test_completed_single_step_development_reward(tmp_path):
+    path = job(tmp_path, 'single-step')
+    t = trial(path, 'trial', finished_at='done', step_results=[{'step_name': 'develop'}])
+    write(t / 'steps/develop/verifier/diagnosis.json', {'phase': 'finished'})
+    write(t / 'steps/develop/verifier/reward.json', {'reward': .8})
+    assert scan(tmp_path)[0]['reward'] == .8
+    write(t / 'result.json', {})
+    assert scan(tmp_path)[0]['reward'] == .8
