@@ -1,6 +1,6 @@
 import pytest
 
-from harness.runtime.scoring import score
+from rlebench.runtime.scoring import score
 
 
 def state(mode, evidence, steps=0, budget=100):

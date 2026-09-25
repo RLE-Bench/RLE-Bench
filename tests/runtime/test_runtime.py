@@ -4,12 +4,12 @@ import socket
 
 import pytest
 
-from harness.runtime.engine import Engine
-from harness.runtime.process import WorkerFailure
-from harness.runtime.protocol import RequestError
-from harness.runtime.scoring import score
-from harness.runtime.server import Server
-from harness.runtime.store import read_state
+from rlebench.runtime.engine import Engine
+from rlebench.runtime.process import WorkerFailure
+from rlebench.runtime.protocol import RequestError
+from rlebench.runtime.scoring import score
+from rlebench.runtime.server import Server
+from rlebench.runtime.store import read_state
 
 
 def config(mode="task02"):
@@ -148,7 +148,7 @@ def test_service_restart_does_not_replay(tmp_path):
 def test_reset_and_next_trial_are_distinct(tmp_path):
     async def scenario():
         e = Engine(tmp_path, config("task01"), FakeWorker)
-        await e.finish_step("develop")
+        await e.dispatch("end_development", {})
         await e.wait_ready()
         with pytest.raises(RequestError):
             await e.reset()
@@ -251,4 +251,77 @@ def test_wire_deduplicates_mutations_and_survives_invalid_request(tmp_path):
         assert (await send(good))["steps"] == 1
         writer.close()
         await server.close()
+    run(scenario)
+
+
+def test_task01_continuous_session(tmp_path, monkeypatch):
+    clock = [100.]
+    monkeypatch.setattr('rlebench.runtime.engine.time.time', lambda: clock[0])
+
+    async def scenario():
+        cfg = config('task01')
+        cfg['seconds'] = {'session': 32400}
+        e = Engine(tmp_path, cfg, FakeWorker)
+        await e.dispatch('reset', {})
+        await e.dispatch('step', dict(actions=[[0, 0]]))
+        development_steps = e.s['dev_steps']
+        clock[0] += 60
+        status = await e.dispatch('end_development', {})
+        assert status['phase'] == 'evaluation' and not status['ready']
+        assert status['seconds_remaining'] == 32340
+        await e.dispatch('task_info', {})
+        starts = FakeWorker.starts
+        await e.dispatch('end_development', {})
+        assert FakeWorker.starts == starts and e.s['trial'] == 0
+        for i in range(3):
+            assert e.s['trial'] == i
+            await e.dispatch('step', dict(actions=[[0, 0]]*4))
+            clock[0] += 1
+            await e.dispatch('next_trial', {})
+        assert e.s['phase'] == 'finished'
+        assert e.s['dev_steps'] == development_steps
+        assert e.status()['seconds_remaining'] == 32337
+        assert score(e.s)['success_rate'] == 1
+        before = score(e.s)
+        await e.dispatch('end_development', {})
+        await e.finish_step('develop')
+        await e.finish_step('develop')
+        assert score(e.s) == before
+        e.store.close()
+    run(scenario)
+
+
+@pytest.mark.parametrize('evaluate', [False, True])
+def test_task01_session_collection_never_opens_another_trial(tmp_path, evaluate):
+    async def scenario():
+        e = Engine(tmp_path, config('task01'), FakeWorker)
+        await e.dispatch('reset', {})
+        if evaluate:
+            await e.dispatch('end_development', {})
+            await e.dispatch('step', dict(actions=[[0, 0]]*4))
+            await e.next_trial()
+        starts = FakeWorker.starts
+        await e.finish_step('develop')
+        await e.finish_step('develop')
+        assert e.s['phase'] == 'finished' and e.worker is None
+        assert FakeWorker.starts == starts
+        assert score(e.s)['success_rate'] == (1/3 if evaluate else 0)
+        assert len(e.s['results']) == (2 if evaluate else 0)
+        e.store.close()
+    run(scenario)
+
+
+def test_task01_initialization_failure_can_advance(tmp_path):
+    async def scenario():
+        e = Engine(tmp_path, config('task01'), FakeWorker)
+        FakeWorker.failure = 'create'
+        await e.dispatch('end_development', {})
+        status = await e.dispatch('task_info', {})
+        assert status['ended'] == 'sim_error' and e.s['failures'] == 1
+        FakeWorker.failure = None
+        await e.next_trial()
+        assert e.s['trial'] == 1 and not e.s['episode_over']
+        await e.finish_step('develop')
+        assert e.s['phase'] == 'finished'
+        e.store.close()
     run(scenario)

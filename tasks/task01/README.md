@@ -18,15 +18,10 @@ only the observation and tool access changes.
 
 ## Workflow and public API
 
-| Harbor step | Default allowance | Purpose |
-| --- | --- | --- |
-| `develop` | 8 hours; 100,000 interactions | Practise, inspect observations and write code |
-| `evaluate` | 1 hour; five trials of at most 1,000 actions each | Apply the developed policy to hidden kitchens |
-
-Both steps share `/workspace`. `rlebench run` requests trajectory resumption for
-task01 agents, except Oracle; the selected agent must support it. The root Harbor
-hook opens evaluation after development ends. `end_development()` closes agent
-interaction in development; it does not itself start evaluation.
+Task01 has one Harbor step, `develop`, with a shared nine-hour allowance. Development
+permits 100,000 interactions; evaluation has five trials of at most 1,000 actions each.
+`end_development()` freezes development usage and opens evaluation immediately. The same
+agent continues with its workspace and conversation intact; no trajectory resumption is needed.
 
 ```python
 from harness.client import SimClient, ObsSpec
@@ -37,13 +32,13 @@ with SimClient() as sim:
     look = sim.observe(ObsSpec(width=384, depth=True))
     print(sim.status())
     # Develop a controller using sim.step(action_or_batch, obs_spec).
-    # Call sim.end_development() when ready, then end the agent turn.
+    # Call sim.end_development() when ready, then continue driving evaluation trials.
 ```
 
 In evaluation, `finish_trial()` ends the current attempt and `next_trial()` opens
 its successor; call it only after the current episode ends. `reset()` is unavailable.
 End the agent turn once the phase is `finished`. Full examples are in the generated
-step instructions and [public client](harness/runtime/client.py).
+step instructions and [public client](../../rlebench/runtime/client.py).
 
 Actions have 12 components in the robot's base frame. Batches contain 1–200 actions
 and cannot exceed the remaining allowance. `observe()` is free; development resets
@@ -89,7 +84,7 @@ only the deliberate privileged observation fields.
 | Task and level | `RLEBENCH_TASK`, `RLEBENCH_LEVEL`, generated per cell |
 | Development budget | `RLEBENCH_INTERACTION_STEPS=100000` |
 | Trial horizon | `RLEBENCH_MAX_STEPS_PER_TRIAL=1000` |
-| Reported clocks | `RLEBENCH_DEVELOP_SECONDS=28800`, `RLEBENCH_EVALUATE_SECONDS=3600` |
+| Reported clocks | `RLEBENCH_SESSION_SECONDS=32400` (shared across both modes) |
 | Clock multiplier | `RLEBENCH_TIMEOUT_MULT=1` |
 | Reward weights | `RLEBENCH_W_OUTCOME=0.8`, `RLEBENCH_W_EFFICIENCY=0.2`, verifier environment only |
 | Hidden plan / seed salt | Root-only `/opt/private/eval_plan.txt`; `plan=1x1,2x1,3x1,4x1,5x1` and optional `salt=...` |
@@ -97,15 +92,15 @@ only the deliberate privileged observation fields.
 The generated `task.toml` forwards budget and multiplier overrides from the host.
 Other overrides require editing the appropriate environment table. Never place
 hidden seeds or plans in container-wide environment variables. Reported time starts
-at the phase's first API request; Harbor enforces the actual deadline. When scaling
+at the session's first API request; Harbor enforces the actual deadline. When scaling
 it, pair `RLEBENCH_TIMEOUT_MULT` with Harbor's `--agent-timeout-multiplier`.
 
 ```text
 harness/                 task.py/config.py, adapter/backend, public client and skills
-  runtime/               broker, worker, ledger, control hooks and verifier
+../../rlebench/runtime/  shared broker, worker, ledger, control hooks and verifier
 _template/
   image/                 Dockerfile, startup/control/verification/isolation scripts
-  steps/{develop,evaluate}/   instructions and level-specific harness descriptions
+  steps/develop/         instructions and level-specific harness descriptions
 build_levels.py          family entry point for the host generator
 build_assets.py          staging/check entry point
 images/L1|L2|L3/          GENERATED public/private image payloads
@@ -149,9 +144,9 @@ Under a Harbor trial directory:
 
 | Path | Contents |
 | --- | --- |
-| `steps/evaluate/verifier/reward.json` | Reward, success rate, planned/recorded/attempted trials, development steps and infrastructure failures |
-| `steps/evaluate/verifier/diagnosis.json` | Ledger and handoff status; media/error diagnostics when applicable |
-| `steps/evaluate/verifier/media/` | Best-effort observation videos and `index.json` |
+| `steps/develop/verifier/reward.json` | Reward, success rate, planned/recorded/attempted trials, development steps and infrastructure failures |
+| `steps/develop/verifier/diagnosis.json` | Ledger and handoff status; media/error diagnostics when applicable |
+| `steps/develop/verifier/media/` | Best-effort observation videos and `index.json` |
 | `steps/*/agent/` | Agent sessions |
 | `steps/*/artifacts/workspace/` | Collected workspace files |
 
@@ -184,3 +179,6 @@ after building them. In an already started, idle container, run
 | Zero attempted trials | Inspect development timeout and evaluation agent logs |
 
 L1/L2 depend on visual observations; use an agent setup that can inspect images.
+
+Final verifier artifacts include `diagnostics/` with private runtime logs, exported only
+after agent processes stop. Intermediate diagnostics expose failure categories and counts.

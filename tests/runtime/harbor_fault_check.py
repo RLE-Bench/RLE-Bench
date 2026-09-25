@@ -62,7 +62,7 @@ PY
                                            capture_output=True,text=True).stdout.strip()
                     if ready not in ("1","2") or ready in injected:
                         continue
-                    module = "harness.runtime.worker" if ready=="1" else "harness.runtime.server"
+                    module = "rlebench.runtime.worker" if ready=="1" else "rlebench.runtime.server"
                     kill = """from pathlib import Path
 import os,signal
 for path in Path('/proc').glob('[0-9]*/cmdline'):

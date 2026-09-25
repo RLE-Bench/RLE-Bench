@@ -59,7 +59,7 @@ class Backend:
         self.raw = {}
         self.video = None
         if descriptor.get("media_name") and os.environ.get("RLEBENCH_MEDIA", "1") != "0":
-            from .runtime.media import Video
+            from rlebench.runtime.media import Video
             self.video = Video('/var/lib/rlebench/media/'+descriptor["media_name"]+'.mp4')
         prepare()
         seed_all(self.seed)

@@ -138,7 +138,7 @@ interface for exploring trajectories, verifier results, and recorded media.
 ## 🗂️ Repository structure
 
 ```text
-rlebench/       Evaluation CLI, agent adapters, result viewer, and shared scoring utilities
+rlebench/       Evaluation CLI, agent adapters, result viewer, shared runtime and scoring utilities
 tasks/          Task specifications, environments, harnesses, and verifiers
 sim/            Pinned simulator stacks and build scripts
 assets/robots/  Shared robot descriptions and their licenses

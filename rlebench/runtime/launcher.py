@@ -25,7 +25,7 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    modules = {"service": "harness.runtime.server"}
+    modules = {"service": "rlebench.runtime.server"}
     if os.environ.get("RLEBENCH_FAMILY") == "task01" and os.environ.get("RLEBENCH_IMAGE_LEVEL") in ("L2", "L3"):
         modules["perception"] = "harness.perception_service"
     while not stopping:

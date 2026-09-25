@@ -68,7 +68,9 @@ def _reward_scores(path: Path, result: dict) -> dict:
     if isinstance(steps, list) and steps:
         final = _object(steps[-1])
         if final.get("step_name") == "develop":
-            return _object(read_json(path / "steps/evaluate/verifier/reward.json"))
+            diagnosis = _object(read_json(path / "steps/develop/verifier/diagnosis.json"))
+            if diagnosis.get("phase") != "finished":
+                return _object(read_json(path / "steps/evaluate/verifier/reward.json"))
         rewards = _object(_object(final.get("verifier_result")).get("rewards"))
         if rewards:
             return rewards
@@ -76,8 +78,8 @@ def _reward_scores(path: Path, result: dict) -> dict:
         if isinstance(name, str) and name not in (".", "..") and "/" not in name:
             path = path / "steps" / name
     elif (path / "steps").is_dir():
-        # Evaluation is the scored phase in RLE-Bench multi-step tasks.
-        path = path / "steps" / "evaluate"
+        diagnosis = _object(read_json(path / "steps/develop/verifier/diagnosis.json"))
+        path = path / "steps" / ("develop" if diagnosis.get("phase") == "finished" else "evaluate")
     return _object(read_json(path / "verifier" / "reward.json"))
 
 

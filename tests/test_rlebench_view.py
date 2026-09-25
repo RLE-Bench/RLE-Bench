@@ -168,3 +168,14 @@ def test_cli_view_defaults_follow_harbor_view(monkeypatch):
     assert cli.main(["view", "runs", "-p", "9000"]) == 0
     assert (seen[-1].folder, server.parse_ports(seen[-1].port)) == ("runs", (9000, 9000))
     assert server.parse_ports("8080-8089") == (8080, 8089)
+
+
+def test_single_step_defaults_to_develop(client, jobs):
+    t = jobs / 'single' / 'single__aaa'
+    v = t / 'steps/develop/verifier'
+    v.mkdir(parents=True)
+    (t / 'config.json').write_text('{}')
+    (t / 'result.json').write_text(json.dumps({'step_results': [{'step_name': 'develop'}]}))
+    (v / 'reward.json').write_text(json.dumps({'reward': .8}))
+    result = client.get('/api/jobs/single/trials/single__aaa').json()
+    assert (result['steps'], result['step'], result['reward']) == (['develop'], 'develop', .8)

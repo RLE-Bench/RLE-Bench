@@ -18,6 +18,7 @@ def main():
     p.add_argument("--gpu", default="2")
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--oracle", type=Path)
+    p.add_argument("--observe-plan", action="store_true", help="render every task02 trial instead of injecting faults")
     args = p.parse_args()
     name = "rlebench-redesign-"+uuid.uuid4().hex[:10]
     suffix = '-'+args.level.lower() if args.family == 'task01' else '-'+args.variant if args.variant else ''
@@ -83,14 +84,62 @@ s.observe();s.disconnect()
 '''
         if args.oracle:
             actor = args.oracle.read_text()
+        elif args.family == 'task01':
+            actor += '''    remaining = s.status()['seconds_remaining']
+    status = s.end_development()
+    assert status['phase'] == 'evaluation'
+    assert status['seconds_remaining'] <= remaining
+    while s.status()['phase'] != 'finished':
+        s.task_info()
+        image = s.observe(ObsSpec(width=512,depth=True))
+        assert image['live'] and image['resolution'] == [512,512], image
+        s.step(a,ObsSpec(cameras=()))
+        s.finish_trial()
+        s.next_trial()
+'''
         report['actor'] = agent(actor)
         report['checks'].append('real reset/step/render and lock')
+        if args.family == 'task01':
+            command(['mkdir','-p','/logs/verifier'])
+            command(['chmod','777','/logs/verifier'])
+            command(['/opt/control.sh','develop'])
+            command(['/opt/verify.sh','develop'])
+            reward = json.loads(command(['cat','/logs/verifier/reward.json']))
+            assert reward['trials_recorded'] == reward['trials_total'], reward
+            assert reward['infrastructure_failures'] == 0, reward
+            report['reward'] = reward
+            report['checks'].append('one client develops and evaluates all trials')
         if args.family == 'task02':
             agent("from pathlib import Path\np=Path('/workspace/agent_harness/MANUAL.md');p.write_text('frozen development')\n")
             command(['/opt/control.sh','develop'])
             command(['mkdir','-p','/logs/verifier'])
             command(['chmod','777','/logs/verifier'])
             command(['/opt/verify.sh','develop'])
+            if args.observe_plan:
+                observations = []
+                count = int(agent("from harness.client import SimClient\nwith SimClient() as s: print(s.status()['total_trials'])"))
+                for i in range(count):
+                    observations.append(agent('''from harness.client import SimClient, ObsSpec
+from pathlib import Path
+with SimClient() as s:
+    s.task_info()
+    assert not Path('/logs/verifier/diagnostics').exists()
+    r=s.observe(ObsSpec(width=512,depth=True))
+    assert r['live'] and r['ended'] is None, r
+    assert sum(k.endswith('_image') for k in r['obs'])==3
+    assert sum(k.endswith('_depth') for k in r['obs'])==3
+    print(s.status()['trial_index'],r['resolution'])
+'''))
+                    command(['/opt/control.sh',f'eval_{i+1:02d}'])
+                    command(['/opt/verify.sh',f'eval_{i+1:02d}'])
+                report['observations'] = observations
+                report['reward'] = json.loads(command(['cat','/logs/verifier/reward.json']))
+                assert report['reward']['infrastructure_failures'] == 0, report['reward']
+                assert command(['test','-s','/logs/verifier/diagnostics/worker.log']) == ''
+                command(['python','/opt/check_isolation.py'],user='agent')
+                report['checks'].append('complete RGB/depth plan, handoffs and final diagnostics')
+                report['ok'] = True
+                return
             # The verifier must not retire the next trial while its worker is initializing.
             agent("from harness.client import SimClient\ns=SimClient();s.task_info();assert s.status()['trial_index']==0;assert not s.status()['episode_over'],s.status();s.disconnect()")
             agent("from pathlib import Path\nPath('/workspace/eval-only.txt').write_text('discard');Path('/workspace/agent_harness/MANUAL.md').write_text('changed')")
@@ -99,7 +148,7 @@ import os, signal
 for p in Path('/proc').glob('[0-9]*/cmdline'):
     try: parts=p.read_bytes().split(b'\\0')
     except (FileNotFoundError,ProcessLookupError): continue
-    if b'harness.runtime.worker' in parts: os.kill(int(p.parent.name),signal.SIGKILL)
+    if b'rlebench.runtime.worker' in parts: os.kill(int(p.parent.name),signal.SIGKILL)
 '''
             command(['python','-'],code=kill)
             time.sleep(.5)
@@ -108,7 +157,7 @@ for p in Path('/proc').glob('[0-9]*/cmdline'):
             command(['/opt/verify.sh','eval_01'])
             agent("from harness.client import SimClient\nfrom pathlib import Path\nassert not Path('/workspace/eval-only.txt').exists();assert Path('/workspace/agent_harness/MANUAL.md').read_text()=='frozen development'\ns=SimClient();s.task_info();assert s.status()['trial_index']==1;assert not s.status()['episode_over'],s.status();s.disconnect()")
             report['checks'].append('worker SIGKILL isolates trial; next trial and frozen handoff survive')
-            command(['python','-'],code=kill.replace('harness.runtime.worker','harness.runtime.server'))
+            command(['python','-'],code=kill.replace('rlebench.runtime.worker','rlebench.runtime.server'))
             time.sleep(2)
             agent("from harness.client import SimClient\ns=SimClient();assert s.status()['ended']=='sim_error',s.status();s.disconnect()")
             command(['/opt/control.sh','eval_02'])

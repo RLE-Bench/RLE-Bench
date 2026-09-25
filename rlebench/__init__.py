@@ -1,3 +1,3 @@
-"""rlebench — the RLE-Bench operations CLI (prepare, run, inspect, check)."""
+"""rlebench — shared benchmark code and host operations."""
 
 __version__ = "0.1.0"

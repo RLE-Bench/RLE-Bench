@@ -1,1 +1,1 @@
-from .runtime.client import ObsSpec
+from rlebench.runtime.client import ObsSpec

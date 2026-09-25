@@ -138,7 +138,7 @@ reported phase clock begins at the first API request.
 ```text
 harness/                 private split, stage predicates, task adapter and backend
   client.py              public SimClient/ObsSpec exports
-  runtime/               broker, worker, ledger, handoff and verifier
+../../rlebench/runtime/  shared broker, worker, ledger, handoff and verifier
 _template/
   image/                 Dockerfile and startup/control/verification/isolation scripts
   steps/{develop,eval_01}/   instruction templates; eval template reused for every trial
@@ -190,12 +190,14 @@ has been learned.
 | `steps/eval_05/verifier/reward.json` | Final cumulative reward, success rate, trial counts and infrastructure failures |
 | `steps/eval_NN/verifier/diagnosis.json` | Ledger/handoff status and optional media/error diagnostics |
 | `steps/eval_NN/verifier/media/` | Best-effort observation videos and index |
+| `steps/eval_05/verifier/diagnostics/` | Private runtime logs exported after the final agent stops |
 | `steps/develop/artifacts/workspace/agent_harness/` | Development deliverable |
 | `steps/*/agent/` | Separate development/evaluation sessions |
 
 Stage evidence remains in the private ledger; diagnosis JSON does not export stage
-vectors. Inspect `/var/lib/rlebench/{worker,service,verifier}.log` as root while the
-container exists. `rlebench view jobs` shows collected verifier media.
+vectors. Failure entries identify the operation and failure category. Inspect
+`/var/lib/rlebench/{worker,service,verifier}.log` as root while the container exists;
+the final verifier retains these logs. `rlebench view jobs` shows collected verifier media.
 
 ```bash
 python3 tasks/task02/build_groups.py --check

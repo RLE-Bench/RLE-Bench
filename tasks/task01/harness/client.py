@@ -1,1 +1,1 @@
-from harness.runtime.client import SimClient, ObsSpec, RemoteError
+from rlebench.runtime.client import SimClient, ObsSpec, RemoteError

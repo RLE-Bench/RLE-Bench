@@ -81,3 +81,74 @@ def test_orphan_pins_agree_everywhere():
             seen.setdefault(name, {}).setdefault(version, []).append(src)
     conflicts = {n: v for n, v in seen.items() if len(v) > 1}
     assert not conflicts, f"orphan pins disagree across images: {conflicts}"
+
+
+def test_task01_single_session_configuration():
+    import tomllib
+    from rlebench.runtime_build import task_toml, instruction
+    config = tomllib.loads(task_toml('task01', '01-open-fridge', 'OpenFridge', 'L1', '', 5))
+    assert config['task']['version'] == '1.2.0'
+    assert config['agent']['timeout_sec'] == 32400
+    assert [s['name'] for s in config['steps']] == ['develop']
+    assert config['steps'][0]['agent']['timeout_sec'] == 32400
+    assert config['steps'][0]['verifier']['collect'][0]['command'] == '/opt/control.sh develop'
+    for level in ('L1', 'L2', 'L3'):
+        prompt = instruction('task01', 'develop', 'OpenFridge', level)
+        assert 'sim.end_development()' in prompt and 'sim.next_trial()' in prompt
+        assert '@@' not in prompt
+    transfer = tomllib.loads(task_toml('task02', '01-washing-dishes', '', 'L1', '', 5))
+    assert len(transfer['steps']) == 6
+
+
+def test_shared_runtime_payload_isolation(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    import pytest
+    from rlebench import runtime_build as build
+
+    source = build.ROOT
+    for relative in ('rlebench/__init__.py', 'sim/robocasa/pins.env',
+                     'sim/robocasa/base/rlebench_ro_assets.py', 'sim/robocasa/base/verify_assets.py',
+                     'sim/perception/requirements.lock'):
+        build.copy_file(source / relative, tmp_path / relative)
+    build.copy_tree(source / 'rlebench/runtime', tmp_path / 'rlebench/runtime')
+    for family in ('task01', 'task02', 'task03'):
+        for part in ('harness', '_template'):
+            build.copy_tree(source / 'tasks' / family / part, tmp_path / 'tasks' / family / part)
+        assert not (source / 'tasks' / family / 'harness/runtime').exists()
+    build.copy_tree(source / 'tasks/task03/tabletop', tmp_path / 'tasks/task03/tabletop')
+    monkeypatch.setattr(build, 'ROOT', tmp_path)
+    cases = [('task01', level, '') for level in ('L1', 'L2', 'L3')]
+    cases += [('task02', 'L1', ''), *[('task03', 'L1', variant) for variant in ('', 'pocket', 'hidden-com')]]
+    for family, level, variant in cases:
+        context = build.stage(family, level, variant)
+        build.check(context)
+        public, private = context / 'payload_agent', context / 'payload_private'
+        for payload in (public, private):
+            assert not (payload / 'harness/runtime').exists()
+        code = '''import importlib, importlib.util, sys
+sys.path.insert(0, sys.argv[1])
+from harness.client import SimClient
+from rlebench.runtime.client import SimClient as SharedClient
+assert SimClient is SharedClient
+for name in ('engine', 'server', 'worker', 'store', 'scoring', 'verify', 'control', 'handoff', 'process', 'launcher', 'media'):
+    try: importlib.import_module('rlebench.runtime.' + name)
+    except ModuleNotFoundError: pass
+    else: raise AssertionError(name + ' exposed')
+for name in ('rlebench.cli', 'harness.task', 'harness.config', 'harness.adapter'):
+    assert importlib.util.find_spec(name) is None, name
+'''
+        subprocess.run([sys.executable, '-I', '-S', '-c', code, str(public)], check=True)
+        code = '''import sys
+sys.path.insert(0, sys.argv[1])
+from rlebench.runtime.engine import Engine
+from rlebench.runtime.server import Server
+from harness.client import SimClient
+'''
+        subprocess.run([sys.executable, '-I', '-S', '-c', code, str(private)], check=True)
+        for unexpected in ('runtime/engine.py', 'cli.py', 'runtime/hidden.json'):
+            path = public / 'rlebench' / unexpected
+            path.write_text('private')
+            with pytest.raises(ValueError, match='unexpected shared code'):
+                build.check(context)
+            path.unlink()

@@ -86,6 +86,8 @@ or a build input.
 rlebench/            ONE Python package. core/: the task-agnostic spine
                      (scoring aggregate + gate, model validity) that families
                      import as rlebench.core and stage into their images.
+                     runtime/: the shared task01/02/03 simulator service; only
+                     its public client/protocol subset enters agent payloads.
                      The rest is host-only: the operations CLI
                      (list/prepare/run/clean/oracle/sweep/check/inspect/doctor/view)
                      and the Python it runs (taskgen, the inspectors).
@@ -103,7 +105,7 @@ tasks/taskNN/        one Harbor task family, self-contained; nothing else at
                      this level:
   harness/           the family's shipped code + private assets, staged into
                      its images as the uniformly-named `harness` package
-                     (in-image imports are harness.* + rlebench.core.*).
+                     (in-image imports are harness.* + rlebench.core.* + rlebench.runtime.*).
                      Exactly one family dir may sit on sys.path per process --
                      RLEBENCH_TEST_TASK selects it for tests
   dev/               what never ships: calibrators (`python -m dev.calibrate`),
@@ -116,7 +118,7 @@ tasks/taskNN/        one Harbor task family, self-contained; nothing else at
 tasks/task01|02|03|04|05/  additionally emit their task matrices from _template/
                      via build_levels.py / build_groups.py / build_tasks.py /
                      build_subtasks.py.
-                     task01/02/03 each own their harness/runtime/ source.
+                     task01/02/03 share rlebench/runtime/; their adapters stay in harness/.
                      task03 stages its domain physics from tabletop/ into
                      the private harness.tabletop package.
 third_party/         GITIGNORED vendoring, one subdir per sim layer: robosuite

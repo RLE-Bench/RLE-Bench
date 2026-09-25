@@ -20,7 +20,7 @@ HiddenCOMClient uses a fixed arm (7-D actions) and submit('A'|'B'|'C'|'D'); no r
 Observe every new box before acting. SpeedrunClient exposes the cube's 14-D controls;
 task_info() describes its tilted robot frames and cameras. Its reset forfeits the trial.
 """
-from harness.runtime.client import SimClient, ObsSpec, RemoteError
+from rlebench.runtime.client import SimClient, ObsSpec, RemoteError
 
 
 def tabletop_view(result):
