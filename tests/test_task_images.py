@@ -98,6 +98,10 @@ def test_task01_single_session_configuration():
         assert '@@' not in prompt
     transfer = tomllib.loads(task_toml('task02', '01-washing-dishes', '', 'L1', '', 5))
     assert len(transfer['steps']) == 6
+    for task in (config, transfer):
+        assert task['environment']['env']['RLEBENCH_MEDIA'] == '${RLEBENCH_MEDIA:-false}'
+    tabletop = tomllib.loads(task_toml('task03', '01-tower-max-height', 'TowerMaxHeight', 'L1', '', 5))
+    assert 'RLEBENCH_MEDIA' not in tabletop['environment']['env']
 
 
 def test_shared_runtime_payload_isolation(tmp_path, monkeypatch):
@@ -112,6 +116,7 @@ def test_shared_runtime_payload_isolation(tmp_path, monkeypatch):
                      'sim/perception/requirements.lock'):
         build.copy_file(source / relative, tmp_path / relative)
     build.copy_tree(source / 'rlebench/runtime', tmp_path / 'rlebench/runtime')
+    build.copy_tree(source / 'rlebench/core', tmp_path / 'rlebench/core')
     for family in ('task01', 'task02', 'task03'):
         for part in ('harness', '_template'):
             build.copy_tree(source / 'tasks' / family / part, tmp_path / 'tasks' / family / part)
@@ -135,7 +140,7 @@ for name in ('engine', 'server', 'worker', 'store', 'scoring', 'verify', 'contro
     try: importlib.import_module('rlebench.runtime.' + name)
     except ModuleNotFoundError: pass
     else: raise AssertionError(name + ' exposed')
-for name in ('rlebench.cli', 'harness.task', 'harness.config', 'harness.adapter'):
+for name in ('rlebench.core', 'rlebench.cli', 'harness.task', 'harness.config', 'harness.adapter'):
     assert importlib.util.find_spec(name) is None, name
 '''
         subprocess.run([sys.executable, '-I', '-S', '-c', code, str(public)], check=True)

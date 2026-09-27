@@ -1,10 +1,11 @@
 """Fixed-size rendering and a single-threaded robosuite adapter."""
 import random
 import re
-import os
 
 import numpy as np
 from PIL import Image
+
+from rlebench.runtime.media import EvaluationVideo, evaluation_enabled
 
 from .compat import _fix_render_cleanup
 
@@ -58,9 +59,9 @@ class Backend:
         self.frames = {}
         self.raw = {}
         self.video = None
-        if descriptor.get("media_name") and os.environ.get("RLEBENCH_MEDIA", "1") != "0":
-            from rlebench.runtime.media import Video
-            self.video = Video('/var/lib/rlebench/media/'+descriptor["media_name"]+'.mp4')
+        if descriptor.get("media_name") and evaluation_enabled():
+            self.video = EvaluationVideo('/var/lib/rlebench/media/'+descriptor["media_name"]+'.mp4',
+                                         self.render_rgb, self.cameras)
         prepare()
         seed_all(self.seed)
         self.env = self.create()
@@ -83,6 +84,8 @@ class Backend:
         self.sequence += 1
         self.frames.clear()
         self.after_reset()
+        if self.video:
+            self.video.capture(self.sequence)
         return dict(info=self.info(), evidence=self.evidence())
 
     def after_reset(self):
@@ -105,6 +108,8 @@ class Backend:
             raise RuntimeError("nonfinite simulator state")
         self.sequence += 1
         self.frames.clear()
+        if self.video:
+            self.video.capture(self.sequence)
         return {**self.evidence(), "done": bool(done)}
 
     def shown(self):
@@ -123,6 +128,13 @@ class Backend:
                                    metres[::-1].astype(np.float32).copy())
         return self.frames[camera]
 
+    def render_rgb(self, camera):
+        if camera in self.frames:
+            return self.frames[camera][0]
+        rgb = self.env.sim.render(camera_name=camera, width=RESOLUTION,
+                                  height=RESOLUTION, depth=False)
+        return np.asarray(rgb, dtype=np.uint8)[::-1].copy()
+
     def observe(self, spec):
         w = min(spec.get("width") or spec.get("height") or self.default_resolution, RESOLUTION)
         h = min(spec.get("height") or spec.get("width") or self.default_resolution, RESOLUTION)
@@ -138,8 +150,6 @@ class Backend:
             f = RESOLUTION / (2 * np.tan(np.deg2rad(self.env.sim.model.cam_fovy[cid]) / 2))
             intrinsics[camera] = [[float(f*w/RESOLUTION), 0, (w-1)/2],
                                   [0, float(f*h/RESOLUTION), (h-1)/2], [0, 0, 1]]
-        if self.video and cameras:
-            self.video.add(self.render(cameras[0])[0])
         return dict(obs=out, resolution=[w, h], max_resolution=RESOLUTION,
                     intrinsics=intrinsics, state_sequence=self.sequence)
 
@@ -148,5 +158,5 @@ class Backend:
 
     def close(self):
         if self.video:
-            self.video.close()
+            self.video.close(self.sequence)
         self.env.close()

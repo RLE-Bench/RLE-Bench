@@ -43,11 +43,37 @@ def export_files(output, directory, paths, index=None):
             proc.wait()
 
 
-def export_media(root, output):
-    paths = [p for p in sorted((root / "media").glob("*.mp4"))
-             if not p.is_symlink() and p.is_file() and p.stat().st_size]
-    export_files(output, "media", paths, dict(enabled=os.environ.get("RLEBENCH_MEDIA", "1") != "0",
-                 files=[p.name for p in paths], skipped=[]))
+def export_media(root, output, state):
+    from .media import evaluation_enabled
+    if state["config"]["mode"] not in ("task01", "task02"):
+        paths = [p for p in sorted((root / "media").glob("*.mp4"))
+                 if not p.is_symlink() and p.is_file() and p.stat().st_size]
+        index = dict(enabled=os.environ.get("RLEBENCH_MEDIA", "1") != "0",
+                     files=[p.name for p in paths], skipped=[])
+    else:
+        paths = []
+        index = dict(enabled=evaluation_enabled(), files=[], skipped=[])
+        if index["enabled"]:
+            for trial in sorted(map(int, state["results"])):
+                path = root / "media" / f"trial-{trial+1:02d}.mp4"
+                metadata = path.with_suffix(".json")
+                reason = "missing or interrupted recording"
+                try:
+                    if metadata.is_symlink():
+                        raise ValueError("invalid metadata")
+                    record = json.loads(metadata.read_text())
+                    if record.get("status") == "complete" and record.get("frames", 0) > 0:
+                        if not path.is_symlink() and path.is_file() and path.stat().st_size:
+                            paths.append(path)
+                            index["files"].append(path.name)
+                            continue
+                        reason = "finalized video missing or invalid"
+                    else:
+                        reason = record.get("reason") or "interrupted recording"
+                except (OSError, ValueError, TypeError, AttributeError):
+                    pass
+                index["skipped"].append(dict(name=path.name, reason=reason))
+    export_files(output, "media", paths, index)
 
 
 def export_diagnostics(root, output):
@@ -81,7 +107,7 @@ def verify(root, output, step):
         diagnosis.update(ledger_ok=True, phase=state["phase"],
                          infrastructure_failures=state["failures"], failures=state.get("failure_details", []))
         try:
-            export_media(root, output)
+            export_media(root, output, state)
         except Exception:
             traceback.print_exc()
             diagnosis["media_ok"] = False

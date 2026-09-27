@@ -18,13 +18,15 @@ def main():
     p.add_argument("--gpu", default="2")
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--oracle", type=Path)
+    p.add_argument("--media", choices=("true", "false"), default="false")
     p.add_argument("--observe-plan", action="store_true", help="render every task02 trial instead of injecting faults")
     args = p.parse_args()
     name = "rlebench-redesign-"+uuid.uuid4().hex[:10]
     suffix = '-'+args.level.lower() if args.family == 'task01' else '-'+args.variant if args.variant else ''
     cmd = ['docker','run','-d','--name',name,'--label','rlebench.redesign=true',
            '--gpus','device='+args.gpu,'-e','RLEBENCH_TASK='+args.task,
-           '-e','RLEBENCH_GROUP='+args.group,'-e','RLEBENCH_LEVEL='+args.level]
+           '-e','RLEBENCH_GROUP='+args.group,'-e','RLEBENCH_LEVEL='+args.level,
+           '-e','RLEBENCH_MEDIA='+args.media]
     if args.assets:
         cmd += ['-v',str(args.assets.resolve())+':/opt/src/robocasa/robocasa/models/assets:ro']
     cmd += [f'rlebench-{args.family}{suffix}-agent:dev']
@@ -39,6 +41,27 @@ def main():
 
     def agent(code):
         return command(['python','-'], user='agent', code=code)
+
+    def check_media(count):
+        index = json.loads(command(['cat', '/logs/verifier/media/index.json']))
+        assert index['enabled'] == (args.media == 'true'), index
+        expected = [f'trial-{i+1:02d}.mp4' for i in range(count)] if args.media == 'true' else []
+        assert index['files'] == expected and index['skipped'] == [], index
+        if expected:
+            command(['python', '-'], code="""import os, pwd, subprocess
+from pathlib import Path
+import imageio_ffmpeg
+root = Path('/logs/verifier')
+owner = root.stat().st_uid or pwd.getpwnam('agent').pw_uid
+for path in (root / 'media').glob('*'):
+    assert path.stat().st_uid == owner, path
+    if path.suffix != '.mp4': continue
+    reader = imageio_ffmpeg.read_frames(str(path))
+    info = next(reader)
+    assert info['size'] == (768, 256) and info['fps'] == 10, info
+    assert len(list(reader)) > 0
+""")
+        report['checks'].append(f'media={args.media}: {len(expected)} completed clips, playable and owned by output user')
 
     try:
         subprocess.run(cmd, check=True, capture_output=True)
@@ -107,6 +130,8 @@ s.observe();s.disconnect()
             reward = json.loads(command(['cat','/logs/verifier/reward.json']))
             assert reward['trials_recorded'] == reward['trials_total'], reward
             assert reward['infrastructure_failures'] == 0, reward
+            check_media(reward['trials_recorded'])
+            command(['python','/opt/check_isolation.py'],user='agent')
             report['reward'] = reward
             report['checks'].append('one client develops and evaluates all trials')
         if args.family == 'task02':
@@ -115,6 +140,7 @@ s.observe();s.disconnect()
             command(['mkdir','-p','/logs/verifier'])
             command(['chmod','777','/logs/verifier'])
             command(['/opt/verify.sh','develop'])
+            check_media(0)
             if args.observe_plan:
                 observations = []
                 count = int(agent("from harness.client import SimClient\nwith SimClient() as s: print(s.status()['total_trials'])"))
@@ -128,10 +154,13 @@ with SimClient() as s:
     assert r['live'] and r['ended'] is None, r
     assert sum(k.endswith('_image') for k in r['obs'])==3
     assert sum(k.endswith('_depth') for k in r['obs'])==3
+    a=[0.]*s.task_info()['action_dim']
+    s.step(a,ObsSpec(cameras=()))
     print(s.status()['trial_index'],r['resolution'])
 '''))
                     command(['/opt/control.sh',f'eval_{i+1:02d}'])
                     command(['/opt/verify.sh',f'eval_{i+1:02d}'])
+                    check_media(i+1)
                 report['observations'] = observations
                 report['reward'] = json.loads(command(['cat','/logs/verifier/reward.json']))
                 assert report['reward']['infrastructure_failures'] == 0, report['reward']
@@ -155,6 +184,11 @@ for p in Path('/proc').glob('[0-9]*/cmdline'):
             agent("from harness.client import SimClient\ns=SimClient();assert s.status()['ended']=='sim_error',s.status();s.disconnect()")
             command(['/opt/control.sh','eval_01'])
             command(['/opt/verify.sh','eval_01'])
+            index = json.loads(command(['cat','/logs/verifier/media/index.json']))
+            assert index['files'] == [], index
+            expected = [{'name': 'trial-01.mp4', 'reason': 'interrupted recording'}] if args.media == 'true' else []
+            assert index['skipped'] == expected, index
+            report['checks'].append('killed worker video skipped; active next trial excluded')
             agent("from harness.client import SimClient\nfrom pathlib import Path\nassert not Path('/workspace/eval-only.txt').exists();assert Path('/workspace/agent_harness/MANUAL.md').read_text()=='frozen development'\ns=SimClient();s.task_info();assert s.status()['trial_index']==1;assert not s.status()['episode_over'],s.status();s.disconnect()")
             report['checks'].append('worker SIGKILL isolates trial; next trial and frozen handoff survive')
             command(['python','-'],code=kill.replace('rlebench.runtime.worker','rlebench.runtime.server'))

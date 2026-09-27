@@ -43,6 +43,8 @@ def stage(family, level="L1", variant=""):
     for name in PUBLIC_RUNTIME:
         copy_file(ROOT / "rlebench/runtime" / name, public / "rlebench/runtime" / name)
     copy_tree(ROOT / "rlebench/runtime", private / "rlebench/runtime")
+    for name in ("__init__.py", "media.py"):
+        copy_file(ROOT / "rlebench/core" / name, private / "rlebench/core" / name)
     copy_tree(here / "harness", private / "harness")
     for name in ("__init__.py", "client.py"):
         copy_file(here / "harness" / name, public / "harness" / name)
@@ -116,6 +118,7 @@ RLEBENCH_TIMEOUT_MULT = "${{RLEBENCH_TIMEOUT_MULT:-1.0}}"
     if family == "task01":
         head += 'RLEBENCH_SESSION_SECONDS = "${RLEBENCH_SESSION_SECONDS:-32400}"\n'
     if family != "task03":
+        head += 'RLEBENCH_MEDIA = "${RLEBENCH_MEDIA:-false}"\n'
         budget = load("task01").INTERACTION_STEPS if family == "task01" else 75000
         horizon = 1000 if family == "task01" else 5000
         head += f'RLEBENCH_INTERACTION_STEPS = "${{RLEBENCH_INTERACTION_STEPS:-{budget}}}"\n'

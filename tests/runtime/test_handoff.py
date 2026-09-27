@@ -29,5 +29,6 @@ def test_family_backends_agree():
     root = Path(__file__).resolve().parents[2]
     expected = root/'tasks/task01/harness'
     for family in ('task02','task03'):
-        for name in ('backend.py','compat.py'):
+        names = ('backend.py', 'compat.py') if family == 'task02' else ('compat.py',)
+        for name in names:
             assert (expected/name).read_bytes() == (root/'tasks'/family/'harness'/name).read_bytes()
