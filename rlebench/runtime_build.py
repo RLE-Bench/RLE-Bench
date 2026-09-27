@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_RUNTIME = ("__init__.py", "client.py", "protocol.py", "capabilities.py")
@@ -92,7 +91,7 @@ def task_toml(family, slug, task, level, variant, count):
         head += 'multi_step_reward_strategy = "final"\n'
     head += f'''\n[task]
 name = "rlebench/{family}-{level}-{slug}"
-version = "{'1.2.0' if family == 'task01' else '1.1.0'}"
+version = "1.1.0"
 description = "Metered robot control through a private simulator service."
 [metadata]
 category = "robotics-control"
@@ -117,7 +116,7 @@ RLEBENCH_TIMEOUT_MULT = "${{RLEBENCH_TIMEOUT_MULT:-1.0}}"
     if family == "task01":
         head += 'RLEBENCH_SESSION_SECONDS = "${RLEBENCH_SESSION_SECONDS:-32400}"\n'
     if family != "task03":
-        budget = 100000 if family == "task01" else 75000
+        budget = load("task01").INTERACTION_STEPS if family == "task01" else 75000
         horizon = 1000 if family == "task01" else 5000
         head += f'RLEBENCH_INTERACTION_STEPS = "${{RLEBENCH_INTERACTION_STEPS:-{budget}}}"\n'
         head += f'RLEBENCH_MAX_STEPS_PER_TRIAL = "${{RLEBENCH_MAX_STEPS_PER_TRIAL:-{horizon}}}"\n'

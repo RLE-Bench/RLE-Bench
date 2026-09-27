@@ -141,14 +141,12 @@ def subtask_slug(index: int, task: str) -> str:
 
 
 # --- budgets ----------------------------------------------------------------
-# 100k steps ~ 63 min of pure stepping at 38 ms. Deliberately finite: the speed-run
-# measures how much simulator experience is burned before the agent declares itself
-# ready, so the cap has to bite. Roughly 100 full-horizon episodes' worth.
+# Roughly 50 full-horizon episodes of development before evaluation.
 #
 # Override with RLEBENCH_INTERACTION_STEPS. The scorer reads the budget back out of
 # the ledger's start record rather than from here, so a per-run override rescales the
 # efficiency term instead of invalidating it.
-INTERACTION_STEPS = 100_000
+INTERACTION_STEPS = 50_000
 # ONE terminal submission: the agent gets a single irreversible call on whether it is
 # ready.
 SUBMISSIONS = 1

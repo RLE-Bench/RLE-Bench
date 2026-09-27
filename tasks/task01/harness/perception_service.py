@@ -209,7 +209,7 @@ def serve(path: str = SOCKET, once: bool = False) -> None:
                 continue
             try:
                 reply = handle(msg)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 # Never die on a bad request: the agent can send anything, and a
                 # perception service that fell over would take the rest of the run with
                 # it while looking like a harness fault.

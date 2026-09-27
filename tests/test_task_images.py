@@ -87,7 +87,7 @@ def test_task01_single_session_configuration():
     import tomllib
     from rlebench.runtime_build import task_toml, instruction
     config = tomllib.loads(task_toml('task01', '01-open-fridge', 'OpenFridge', 'L1', '', 5))
-    assert config['task']['version'] == '1.2.0'
+    assert config['task']['version'] == '1.1.0'
     assert config['agent']['timeout_sec'] == 32400
     assert [s['name'] for s in config['steps']] == ['develop']
     assert config['steps'][0]['agent']['timeout_sec'] == 32400

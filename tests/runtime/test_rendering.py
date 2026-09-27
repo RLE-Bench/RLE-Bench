@@ -3,7 +3,7 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from harness.backend import Backend, RESOLUTION, resize
+from harness.backend import Backend, resize
 
 
 def backend():
