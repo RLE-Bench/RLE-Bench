@@ -22,6 +22,9 @@ task_info() describes its tilted robot frames and cameras. Its reset forfeits th
 """
 from rlebench.runtime.client import SimClient, ObsSpec, RemoteError
 
+__all__ = ["SimClient", "ObsSpec", "RemoteError", "tabletop_view",
+           "TabletopClient", "SpeedrunClient", "HiddenCOMClient"]
+
 
 def tabletop_view(result):
     obs = result.pop("obs", {})

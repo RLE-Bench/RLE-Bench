@@ -19,7 +19,7 @@ only the observation and tool access changes.
 ## Workflow and public API
 
 Task01 has one Harbor step, `develop`, with a shared nine-hour allowance. Development
-permits 100,000 interactions; evaluation has five trials of at most 1,000 actions each.
+permits 50,000 interactions; evaluation has five trials of at most 1,000 actions each.
 `end_development()` freezes development usage and opens evaluation immediately. The same
 agent continues with its workspace and conversation intact; no trajectory resumption is needed.
 
@@ -82,7 +82,7 @@ only the deliberate privileged observation fields.
 | Setting | Default / location |
 | --- | --- |
 | Task and level | `RLEBENCH_TASK`, `RLEBENCH_LEVEL`, generated per cell |
-| Development budget | `RLEBENCH_INTERACTION_STEPS=100000` |
+| Development budget | `RLEBENCH_INTERACTION_STEPS=50000` |
 | Trial horizon | `RLEBENCH_MAX_STEPS_PER_TRIAL=1000` |
 | Reported clocks | `RLEBENCH_SESSION_SECONDS=32400` (shared across both modes) |
 | Clock multiplier | `RLEBENCH_TIMEOUT_MULT=1` |
