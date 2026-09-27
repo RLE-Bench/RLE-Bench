@@ -189,7 +189,7 @@ has been learned.
 | --- | --- |
 | `steps/eval_05/verifier/reward.json` | Final cumulative reward, success rate, trial counts and infrastructure failures |
 | `steps/eval_NN/verifier/diagnosis.json` | Ledger/handoff status and optional media/error diagnostics |
-| `steps/eval_NN/verifier/media/` | Best-effort observation videos and index |
+| `steps/eval_NN/verifier/media/` | Opt-in evaluation videos and index |
 | `steps/eval_05/verifier/diagnostics/` | Private runtime logs exported after the final agent stops |
 | `steps/develop/artifacts/workspace/agent_harness/` | Development deliverable |
 | `steps/*/agent/` | Separate development/evaluation sessions |
@@ -198,6 +198,17 @@ Stage evidence remains in the private ledger; diagnosis JSON does not export sta
 vectors. Failure entries identify the operation and failure category. Inspect
 `/var/lib/rlebench/{worker,service,verifier}.log` as root while the container exists;
 the final verifier retains these logs. `rlebench view jobs` shows collected verifier media.
+
+Evaluation videos are off by default. Set `RLEBENCH_MEDIA=true` (or `1`) on the
+host when launching a run, for example `RLEBENCH_MEDIA=true rlebench run task02 -a oracle`.
+Only evaluation is recorded: the initial state, every second action, and the final
+state, including actions that request no camera observations. Rendering stays at
+512×512; RGB frames from left, right, and wrist cameras are downsampled on the CPU
+and tiled into 768×256 video at 10 fps. Depth readback is skipped for video-only
+renders. Capture adds rendering and encoding cost, but never consumes simulator
+interaction steps. Completed clips are exported by the verifier; `index.json`
+lists skipped or interrupted recordings. Earlier runs without saved frames cannot
+be recovered.
 
 ```bash
 python3 tasks/task02/build_groups.py --check

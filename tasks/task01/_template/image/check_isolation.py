@@ -7,7 +7,8 @@ import socket
 assert os.geteuid() != 0
 for path in ('/opt/private', '/opt/src', '/var/lib/rlebench'):
     assert not os.access(path, os.R_OK | os.X_OK), path
-for path in ('/var/lib/rlebench/ledger.sqlite', '/var/lib/rlebench/worker.log',
+for path in ('/var/lib/rlebench/media/trial-01.mp4', '/var/lib/rlebench/media/trial-01.json',
+             '/var/lib/rlebench/ledger.sqlite', '/var/lib/rlebench/worker.log',
              '/var/lib/rlebench/service.log', '/var/lib/rlebench/failures.jsonl', '/var/lib/rlebench/handoff/MANUAL.md'):
     try:
         with open(path, 'rb'):
@@ -16,7 +17,7 @@ for path in ('/var/lib/rlebench/ledger.sqlite', '/var/lib/rlebench/worker.log',
         pass
 for module in ('robocasa', 'robosuite', 'harness.task', 'harness.adapter', 'harness.config',
                'rlebench.runtime.server', 'rlebench.runtime.store', 'rlebench.runtime.engine',
-               'rlebench.runtime.worker', 'rlebench.runtime.scoring', 'rlebench.cli'):
+               'rlebench.core.media', 'rlebench.runtime.media', 'rlebench.runtime.worker', 'rlebench.runtime.scoring', 'rlebench.cli'):
     try:
         importlib.import_module(module)
     except (ImportError, PermissionError):

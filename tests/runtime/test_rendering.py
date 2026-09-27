@@ -17,7 +17,7 @@ def backend():
         calls.append(kw)
         rgb = np.tile(np.arange(512, dtype=np.uint16)[:, None, None], (1, 512, 3)).astype(np.uint8)
         z = np.tile(np.linspace(0, 1, 512, dtype=np.float32), (512, 1))
-        return rgb, z
+        return (rgb, z) if kw["depth"] else rgb
     model = NS(vis=NS(map=NS(znear=.01, zfar=10)), stat=NS(extent=2),
                camera_name2id=lambda name: 0, cam_fovy=[60])
     b.env = NS(sim=NS(render=render, model=model))
@@ -56,3 +56,81 @@ def test_failed_render_is_not_silently_omitted():
     b.env.sim.render = fail
     with pytest.raises(RuntimeError):
         b.observe({})
+
+
+@pytest.mark.skipif(not hasattr(Backend, 'render_rgb'), reason='task03 retains observation capture')
+def test_video_rgb_matches_agent_rgb_without_poisoning_depth_cache():
+    b, calls = backend()
+    video_rgb = b.render_rgb('camera')
+    assert b.frames == {}
+    rgb, depth = b.render('camera')
+    np.testing.assert_array_equal(video_rgb, rgb)
+    assert depth.shape == (512, 512)
+    assert b.render_rgb('camera') is rgb
+    assert [c['depth'] for c in calls] == [False, True]
+    assert all(c['width'] == c['height'] == 512 for c in calls)
+
+
+@pytest.mark.skipif(not hasattr(Backend, 'render_rgb'), reason='task03 retains observation capture')
+@pytest.mark.parametrize('steps', [0, 1, 2, 5, 6])
+def test_evaluation_capture_initial_action_cadence_and_final(tmp_path, steps):
+    from rlebench.runtime.media import EvaluationVideo
+    from unittest.mock import Mock
+    b, calls = backend()
+    b.cameras = ('left', 'right', 'wrist')
+    b.seed = 0
+    b.env.reset = lambda: {}
+    b.env.sim.model.vis.global_ = NS(offwidth=512, offheight=512)
+    b.env.sim.data = NS(qpos=np.zeros(1))
+    b.env.step = lambda action: ({}, 0, False, {})
+    b.env.close = lambda: None
+    b.after_reset = lambda: None
+    b.info = lambda: {}
+    b.evidence = lambda: {}
+    b.video = EvaluationVideo(tmp_path / 'trial-01.mp4', b.render_rgb, b.cameras)
+    b.video.video.close()
+    writer = Mock()
+    writer.closing.is_set.return_value = False
+    b.video.video = writer
+    b.reset()
+    for _ in range(steps):
+        b.act(action=[0])
+        b.observe({'cameras': []})
+    before = writer.add.call_count
+    b.observe({})
+    b.observe({})
+    assert writer.add.call_count == before
+    b.close()
+    b.close()
+    assert writer.add.call_count == 1 + steps // 2 + steps % 2
+    assert all(c['width'] == c['height'] == 512 for c in calls)
+    assert writer.add.call_args.args[0].shape == (256, 768, 3)
+    assert [c['camera_name'] for c in calls[:3]] == ['left', 'right', 'wrist']
+
+
+@pytest.mark.skipif(not hasattr(Backend, 'render_rgb'), reason='task03 retains observation capture')
+def test_video_capture_failure_is_contained(tmp_path):
+    from rlebench.runtime.media import EvaluationVideo
+    import json
+    b, _ = backend()
+    def fail(camera):
+        raise RuntimeError('render failed')
+    video = EvaluationVideo(tmp_path / 'trial-01.mp4', fail, b.cameras)
+    video.capture(b.sequence)
+    video.close(b.sequence)
+    record = json.loads((tmp_path / 'trial-01.json').read_text())
+    assert record['status'] == 'incomplete'
+    assert 'render failed' in record['reason']
+
+
+@pytest.mark.skipif(not hasattr(Backend, 'render_rgb'), reason='task03 keeps its existing defaults')
+def test_development_never_creates_recorder(monkeypatch):
+    import importlib
+    module = importlib.import_module(Backend.__module__)
+    monkeypatch.setenv('RLEBENCH_MEDIA', 'true')
+    monkeypatch.setattr(module, 'prepare', lambda: None)
+    monkeypatch.setattr(Backend, 'create', lambda self: NS())
+    def fail(*args):
+        raise AssertionError('development created a recorder')
+    monkeypatch.setattr(module, 'EvaluationVideo', fail)
+    assert Backend(seed=0).video is None

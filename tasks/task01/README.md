@@ -146,14 +146,24 @@ Under a Harbor trial directory:
 | --- | --- |
 | `steps/develop/verifier/reward.json` | Reward, success rate, planned/recorded/attempted trials, development steps and infrastructure failures |
 | `steps/develop/verifier/diagnosis.json` | Ledger and handoff status; media/error diagnostics when applicable |
-| `steps/develop/verifier/media/` | Best-effort observation videos and `index.json` |
+| `steps/develop/verifier/media/` | Opt-in evaluation videos and `index.json` |
 | `steps/*/agent/` | Agent sessions |
 | `steps/*/artifacts/workspace/` | Collected workspace files |
 
 Only the final step reward counts. Check infrastructure failures and diagnosis before
 interpreting a low score. Root-only `worker.log`, `service.log` and `verifier.log` live
-in `/var/lib/rlebench` while the container exists. Videos sample observations rather
-than every physics step; `rlebench view jobs` displays collected verifier media.
+in `/var/lib/rlebench` while the container exists. `rlebench view jobs` displays collected verifier media.
+
+Evaluation videos are off by default. Set `RLEBENCH_MEDIA=true` (or `1`) on the
+host when launching a run, for example `RLEBENCH_MEDIA=true rlebench run task01 -a oracle`.
+Only evaluation is recorded: the initial state, every second action, and the final
+state, including actions that request no camera observations. Rendering stays at
+512×512; RGB frames from left, right, and wrist cameras are downsampled on the CPU
+and tiled into 768×256 video at 10 fps. Depth readback is skipped for video-only
+renders. Capture adds rendering and encoding cost, but never consumes simulator
+interaction steps. Completed clips are exported by the verifier; `index.json`
+lists skipped or interrupted recordings. Earlier runs without saved frames cannot
+be recovered.
 
 ```bash
 python3 tasks/task01/build_levels.py --check

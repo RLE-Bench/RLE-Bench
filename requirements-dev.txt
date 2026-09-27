@@ -5,3 +5,5 @@ harbor==0.21.0
 huggingface-hub==1.31.0
 # `make lint`.
 pyflakes==3.4.0
+# Exercise the same bundled video encoder as the simulator images.
+imageio-ffmpeg==0.6.0
