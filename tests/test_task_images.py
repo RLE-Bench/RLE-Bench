@@ -140,7 +140,7 @@ for name in ('engine', 'server', 'worker', 'store', 'scoring', 'verify', 'contro
     try: importlib.import_module('rlebench.runtime.' + name)
     except ModuleNotFoundError: pass
     else: raise AssertionError(name + ' exposed')
-for name in ('rlebench.core', 'rlebench.cli', 'harness.task', 'harness.config', 'harness.adapter'):
+for name in ('rlebench.core', 'rlebench.cli', 'harness.task', 'harness.config', 'harness.adapter', 'harness.metrics'):
     assert importlib.util.find_spec(name) is None, name
 '''
         subprocess.run([sys.executable, '-I', '-S', '-c', code, str(public)], check=True)

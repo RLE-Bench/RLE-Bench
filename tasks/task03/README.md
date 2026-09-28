@@ -159,7 +159,11 @@ of an optimal score. The cube has no Oracle, so select supported cells explicitl
 ## Results and checks
 
 For each Harbor trial, `verifier/reward.json` contains reward, trial counts and
-infrastructure failures; `verifier/diagnosis.json` reports ledger/handoff status.
+infrastructure failures. Private family metrics add the legacy quality, budget,
+cube-turn and per-box breakdowns. Tabletop `success_rate` retains its continuous
+quality meaning; `quality` names it explicitly. Cube quality and `task_score`
+are reported before the unclassified-turn reward cap.
+`verifier/diagnosis.json` reports ledger/handoff status.
 `verifier/media/` contains best-effort observation videos and an index. Agent sessions
 are under `agent/`, and collected files under `artifacts/workspace/`.
 `rlebench view jobs` displays results and media. Private logs are under

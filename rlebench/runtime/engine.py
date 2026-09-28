@@ -174,6 +174,14 @@ class Engine:
         self.require_live()
         if len(actions) > self.status()["steps_remaining"]:
             raise P.RequestError("batch exceeds remaining budget", "budget_exhausted")
+        if recover:
+            try:
+                available = await self.worker.call("recovery_available")
+            except WorkerFailure as exc:
+                await self.failed(exc)
+                return {**await self.observe(spec), "steps": 0, "success": False}
+            if not available:
+                raise P.RequestError("Recovery is available only after the cube has dropped.")
         applied = 0
         for action in actions:
             self.charge("step")
@@ -372,7 +380,10 @@ class Engine:
         if op == "submit":
             return await self.submit(**fields)
         if op == "recover_drop" and self.mode == "pocket":
-            return await self.execute_actions([[0.]*6 + [-1.] + [0.]*6 + [-1.]], {}, recover=True)
+            result = await self.execute_actions([[0.]*6 + [-1.] + [0.]*6 + [-1.]], {}, recover=True)
+            if result["steps"]:
+                result["recovered"] = True
+            return result
         if op == "move" and self.mode in ("tabletop", "hidden_com"):
             count = fields.pop("steps", 40)
             if type(count) is not int or not 1 <= count <= P.MAX_BATCH:

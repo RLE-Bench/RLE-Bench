@@ -1,5 +1,6 @@
 """Verifier-only reward writer, independent of simulator availability."""
 import argparse
+import importlib
 import io
 import json
 import os
@@ -102,8 +103,10 @@ def verify(root, output, step):
         except Exception:
             traceback.print_exc()
         state = read_state(root / "ledger.sqlite")
+        module = state["config"].get("metrics")
+        metrics = importlib.import_module(module).metrics if module else None
         result = score(state, (float(os.environ.get("RLEBENCH_W_OUTCOME", ".8")),
-                               float(os.environ.get("RLEBENCH_W_EFFICIENCY", ".2"))))
+                               float(os.environ.get("RLEBENCH_W_EFFICIENCY", ".2"))), metrics=metrics)
         diagnosis.update(ledger_ok=True, phase=state["phase"],
                          infrastructure_failures=state["failures"], failures=state.get("failure_details", []))
         try:

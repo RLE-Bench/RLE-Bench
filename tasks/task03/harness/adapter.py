@@ -56,6 +56,13 @@ class Adapter(Backend):
             return dict(quality=max(0., min(1., quality)))
         return self.evidence()
 
+    def recovery_available(self):
+        try:
+            self.env.require_dropped()
+        except ValueError:
+            return False
+        return True
+
     def shown(self):
         public = super().shown()
         if self.descriptor["task"] == "BalanceCoins":

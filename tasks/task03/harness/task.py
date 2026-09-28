@@ -29,7 +29,7 @@ def configuration():
         layout = {"arm_osc_pose": [0, 6], "gripper": [6, 7]}
         plan = [dict(task=task, seed=case.seed, case=i, mode=mode, default_resolution=512)
                 for i, case in enumerate(CASES)]
-    return dict(mode=mode, adapter="harness.adapter", train=[task], plan=plan,
+    return dict(mode=mode, adapter="harness.adapter", metrics="harness.metrics", train=[task], plan=plan,
                 seconds=dict(evaluate=3600 if mode=="hidden_com" else 32400),
                 budget=budget, horizon=budget,
                 public=dict(action_dim=dimension, action_layout=layout, cameras=cameras,

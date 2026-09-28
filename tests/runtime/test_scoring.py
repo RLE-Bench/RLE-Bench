@@ -41,3 +41,10 @@ def test_missing_cube_counters_cannot_earn_credit():
 def test_hidden_mass_uses_private_quadrant(answer, expected):
     result = score(state("hidden_com", dict(quadrant="A",answer=answer)))
     assert result["reward"] == result["success_rate"] == expected
+
+
+@pytest.mark.parametrize("extra", [{"reward": 1.}, {"success_rate": 1.},
+                                  {"detail": float("nan")}, {"detail": "1"}])
+def test_task_metrics_cannot_replace_scores_or_emit_invalid_values(extra):
+    with pytest.raises(ValueError):
+        score(state("task02", dict(score=.6)), metrics=lambda *_: extra)

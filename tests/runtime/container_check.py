@@ -105,6 +105,15 @@ except Exception: pass
 else: raise AssertionError('stale trial accepted')
 s.observe();s.disconnect()
 '''
+        if args.variant == 'pocket':
+            actor += '''    before=s.status()['steps_used']
+    try: s._request('recover_drop')
+    except RemoteError as e: assert e.kind=='bad_request'
+    else: raise AssertionError('recovery accepted before drop')
+    assert s.status()['steps_used']==before and not s.status()['episode_over']
+    assert s.observe()['live']
+    assert s.step(a,ObsSpec(cameras=()))['steps']==1
+'''
         if args.oracle:
             actor = args.oracle.read_text()
         elif args.family == 'task01':
@@ -134,6 +143,26 @@ s.observe();s.disconnect()
             command(['python','/opt/check_isolation.py'],user='agent')
             report['reward'] = reward
             report['checks'].append('one client develops and evaluates all trials')
+        if args.family == 'task03':
+            command(['mkdir', '-p', '/logs/verifier'])
+            command(['chmod', '777', '/logs/verifier'])
+            command(['/opt/control.sh', 'attempt'])
+            command(['/opt/verify.sh', 'attempt'])
+            reward = json.loads(command(['cat', '/logs/verifier/reward.json']))
+            assert reward['infrastructure_failures'] == 0, reward
+            if args.variant == 'hidden-com':
+                expected = {'correct', 'submitted', 'control_steps'}
+                expected.update(f'trial_{i}_{key}' for i in range(1, 4)
+                                for key in ('reward', 'correct', 'submitted', 'control_steps'))
+            else:
+                expected = {'quality', 'task_score', 'component_outcome', 'component_efficiency',
+                            'interaction_steps', 'interaction_budget'}
+                if args.variant == 'pocket':
+                    expected.update(('optimal_qtm', 'actual_qtm', 'unclassified_transitions', 'recoveries'))
+            assert expected <= reward.keys(), reward
+            command(['python', '/opt/check_isolation.py'], user='agent')
+            report['reward'] = reward
+            report['checks'].append('private task metrics exported by verifier; UID isolation preserved')
         if args.family == 'task02':
             agent("from pathlib import Path\np=Path('/workspace/agent_harness/MANUAL.md');p.write_text('frozen development')\n")
             command(['/opt/control.sh','develop'])
