@@ -67,13 +67,14 @@ class Video:
         self.closing.set()
         deadline = time.monotonic() + 2
         if self.thread.ident is not None:
-            self.thread.join(timeout=max(0, deadline - time.monotonic()))
+            # Reserve time to reap a stuck encoder and finish thread cleanup.
+            self.thread.join(timeout=max(0, deadline - time.monotonic() - 1))
         if self.thread.is_alive():
             self.fail("encoder shutdown timed out")
             with self.lock:
                 if self.proc is not None and self.proc.poll() is None:
                     self.proc.kill()
-            self.thread.join(timeout=.2)
+            self.thread.join(timeout=max(0, deadline - time.monotonic()))
         atexit.unregister(self.close)
 
     def _encode(self):
