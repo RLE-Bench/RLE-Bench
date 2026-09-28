@@ -254,7 +254,7 @@ def check(context):
         raise ValueError("unexpected shared code in the public payload")
     if (public / "harness/runtime").exists():
         raise ValueError("obsolete family runtime in the public payload")
-    forbidden = {"task.py", "adapter.py", "backend.py", "compat.py", "stages.py", "config.py"}
+    forbidden = {"task.py", "adapter.py", "backend.py", "compat.py", "stages.py", "config.py", "metrics.py"}
     if any(p.name in forbidden for p in public.rglob("*.py")):
         raise ValueError("private family code entered public payload")
 

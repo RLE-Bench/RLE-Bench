@@ -14,7 +14,7 @@ for path in ('/var/lib/rlebench/ledger.sqlite', '/var/lib/rlebench/worker.log',
             raise AssertionError('private file readable')
     except (PermissionError, FileNotFoundError):
         pass
-for module in ('robocasa', 'robosuite', 'harness.task', 'harness.adapter', 'harness.config',
+for module in ('robocasa', 'robosuite', 'harness.task', 'harness.adapter', 'harness.config', 'harness.metrics',
                'rlebench.runtime.server', 'rlebench.runtime.store', 'rlebench.runtime.engine',
                'rlebench.runtime.worker', 'rlebench.runtime.scoring', 'rlebench.cli'):
     try:

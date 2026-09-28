@@ -47,6 +47,8 @@ class FakeWorker:
             return dict(info={}, evidence=dict(score=0))
         if op == "finish":
             return dict(quality=.7)
+        if op == "recovery_available":
+            return self.n > 0
         raise AssertionError(op)
 
     async def stop(self):
@@ -322,5 +324,44 @@ def test_task01_initialization_failure_can_advance(tmp_path):
         assert e.s['trial'] == 1 and not e.s['episode_over']
         await e.finish_step('develop')
         assert e.s['phase'] == 'finished'
+        e.store.close()
+    run(scenario)
+
+
+def test_cube_recovery_rejection_preserves_attempt_and_budget(tmp_path):
+    async def scenario():
+        cfg = config("pocket")
+        cfg["public"]["action_dim"] = 14
+        e = Engine(tmp_path, cfg, FakeWorker)
+        await e.recover()
+        await e.wait_ready()
+        with pytest.raises(RequestError, match="dropped"):
+            await e.dispatch("recover_drop", {})
+        assert e.status()["steps_used"] == 0
+        assert not e.s["episode_over"] and not e.s["results"] and e.s["failures"] == 0
+        assert (await e.observe({}))["live"]
+        await e.dispatch("step", dict(actions=[[0.]*14]))
+        result = await e.dispatch("recover_drop", {})
+        assert result["recovered"] and result["steps"] == 1 and result["steps_used"] == 2
+        assert result["live"] and e.s["failures"] == 0
+        await e.stop()
+        e.store.close()
+    run(scenario)
+
+
+@pytest.mark.parametrize("failure,charged", [("recovery_available", 1), ("act", 2)])
+def test_cube_recovery_worker_failure_still_ends_trial(tmp_path, failure, charged):
+    async def scenario():
+        cfg = config("pocket")
+        cfg["public"]["action_dim"] = 14
+        e = Engine(tmp_path, cfg, FakeWorker)
+        await e.recover()
+        await e.wait_ready()
+        await e.dispatch("step", dict(actions=[[0.]*14]))
+        FakeWorker.failure = failure
+        result = await e.dispatch("recover_drop", {})
+        assert result["ended"] == "sim_error" and result["steps_used"] == charged
+        assert e.s["failures"] == 1 and e.worker is None
+        assert not result.get("recovered")
         e.store.close()
     run(scenario)
