@@ -70,7 +70,8 @@ def test_overflow_disables_recording_without_dropping_silently(tmp_path, monkeyp
         video.close()
 
 
-def test_stuck_encoder_is_killed_within_worker_shutdown_bound(tmp_path, monkeypatch):
+@pytest.mark.parametrize('cleanup_delay', [0, .4])
+def test_stuck_encoder_is_killed_within_worker_shutdown_bound(tmp_path, monkeypatch, cleanup_delay):
     import sys
     real_popen = subprocess.Popen
     started = threading.Event()
@@ -79,6 +80,12 @@ def test_stuck_encoder_is_killed_within_worker_shutdown_bound(tmp_path, monkeypa
         started.set()
         return proc
     monkeypatch.setattr(media.subprocess, 'Popen', stuck)
+    real_fail = media.Video.fail
+    def delayed_cleanup(self, reason):
+        if reason.startswith('encoding failed:'):
+            time.sleep(cleanup_delay)
+        real_fail(self, reason)
+    monkeypatch.setattr(media.Video, 'fail', delayed_cleanup)
     video = media.Video(tmp_path / 'trial-01.mp4')
     video.add(np.zeros((256, 768, 3), dtype=np.uint8))
     assert started.wait(2)
