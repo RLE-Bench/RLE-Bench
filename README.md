@@ -15,7 +15,8 @@
 
 
 ## 📰 News
-
+- **[2026-10-02]:** The technical report is now live at [https://arxiv.org/html/2609.34210v2](https://arxiv.org/html/2609.34210v2). Plenty of interesting agent behaviors to explore!
+- **[2026-10-02]:** We added GPT-6.1 Sol, Claude Opus 5.5, Claude Fable 5.1 and GPT-6 Luna to the leaderboard.
 - **[2026-09-14]:** The [RLE-Bench leaderboard](https://rle-bench.github.io/) is live — browse agent results across the nine task families. Read [Introducing RLE-Bench](https://rle-bench.github.io/blog/) for an overview of the benchmark, evaluation methodology, results, and task demos.
 
 ## 👋 Overview
