@@ -156,11 +156,11 @@ under [sim/](sim/).
 If you use RLE-Bench, or results produced with it, please cite:
 
 ```bibtex
-@misc{rlebench2026,
-  title        = {RLE-Bench: A Qualifying Exam for Coding Agents as Robot Learning Engineers},
-  author       = {{RLE-Bench contributors}},
-  year         = {2026},
-  howpublished = {\url{https://github.com/RLE-Bench/RLE-Bench}},
+@article{ma2026rle,
+  title={RLE-Bench: A Qualifying Exam for Coding Agents as Robot Learning Engineers},
+  author={Ma, Haitong and Gao, Chenxiao and Qiang, Rushi and Li, Na and Dai, Bo},
+  journal={arXiv preprint arXiv:2609.34210},
+  year={2026}
 }
 ```
 
