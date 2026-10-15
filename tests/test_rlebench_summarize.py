@@ -202,6 +202,45 @@ def test_cli_groups_jobs_without_averaging_group_means(tmp_path, capsys, monkeyp
         cli.main(["summarize", str(bad)])
 
 
+def test_trial_rows_carry_outcome_failure_reason_and_timing(tmp_path):
+    path = job(tmp_path, "run", stats={"n_completed_trials": 1, "n_errored_trials": 1})
+    ok = trial(path, "good", {"reward": 0.7},
+               started_at="2026-09-09T10:00:00", finished_at="2026-09-09T10:30:00")
+    write(ok / "verifier/reward.json", {"reward": 0.7, "gated": 0})
+    trial(path, "boom",
+          started_at="2026-09-09T11:00:00", finished_at="2026-09-09T11:05:00",
+          exception_info={"exception_type": "ApiError", "exception": "rate limited"})
+    rows = scan(tmp_path)
+    assert len(rows) == 1
+    trials = rows[0]["extra"]["trials"]
+    assert [t["trial"] for t in trials] == ["boom", "good"]
+    assert trials[1]["status"] == "completed" and trials[1]["error"] is None
+    assert trials[1]["started_at"] == "2026-09-09T10:00:00"
+    assert trials[1]["finished_at"] == "2026-09-09T10:30:00"
+    assert trials[1]["gated"] is False and trials[1]["rewards"]["reward"] == 0.7
+    assert trials[0]["status"] == "failed" and trials[0]["error"] == "ApiError"
+    assert trials[0]["finished_at"] == "2026-09-09T11:05:00"
+    # a saved summary must round-trip the per-trial rows unchanged
+    import json as _json
+    from rlebench import summarize as summarizer
+    root = tmp_path / "jobs"
+    (tmp_path / "run").rename(root)
+    assert summarizer.summarize(root) == 0
+    saved = _json.loads((root / "summary.json").read_text())
+    saved_trials = saved["runs"][0]["extra"]["trials"]
+    assert saved_trials[0]["status"] == "failed" and saved_trials[0]["error"] == "ApiError"
+    assert saved_trials[1]["rewards"]["reward"] == 0.7
+
+
+def test_running_trial_without_finish(tmp_path):
+    path = job(tmp_path, "run", stats={"n_running_trials": 1}, finished=False)
+    trial(path, "live", started_at="2026-09-09T10:00:00")
+    rows = scan(tmp_path)
+    trial_row = rows[0]["extra"]["trials"][0]
+    assert trial_row["status"] == "running" and trial_row["finished_at"] is None
+    assert trial_row["error"] is None and trial_row["gated"] is None
+
+
 def test_completed_single_step_development_reward(tmp_path):
     path = job(tmp_path, 'single-step')
     t = trial(path, 'trial', finished_at='done', step_results=[{'step_name': 'develop'}])
