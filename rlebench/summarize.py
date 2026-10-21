@@ -75,11 +75,14 @@ def _reward_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
                 file = path / "steps/evaluate/verifier/reward.json"
                 return _object(read_json(file)), file
         rewards = _object(_object(final.get("verifier_result")).get("rewards"))
-        if rewards:
-            return rewards, path / "verifier" / "reward.json"
         name = final.get("step_name")
         if isinstance(name, str) and name not in (".", "..") and "/" not in name:
             path = path / "steps" / name
+        # Select the final step directory before resolving embedded rewards, so the
+        # reward file (and its sibling report.json / gated flag) are read from that
+        # step rather than from the trial root.
+        if rewards:
+            return rewards, path / "verifier" / "reward.json"
     elif (path / "steps").is_dir():
         diagnosis = _object(read_json(path / "steps/develop/verifier/diagnosis.json"))
         path = path / "steps" / ("develop" if diagnosis.get("phase") == "finished" else "evaluate")

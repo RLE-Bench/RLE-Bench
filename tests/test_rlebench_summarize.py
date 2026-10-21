@@ -249,3 +249,68 @@ def test_completed_single_step_development_reward(tmp_path):
     assert scan(tmp_path)[0]['reward'] == .8
     write(t / 'result.json', {})
     assert scan(tmp_path)[0]['reward'] == .8
+
+
+def test_embedded_final_step_reward_ignores_conflicting_root_metadata(tmp_path):
+    """A reward embedded in the final step must resolve gated/report metrics from that
+    step's directory, not the trial root."""
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop"},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.4}}},
+    ])
+    write(t / "steps/evaluate/verifier/reward.json", {"reward": 0.4, "gated": 1})
+    write(t / "steps/evaluate/verifier/report.json", {"success_rate": 0.25})
+    # conflicting metadata left at the trial root must not win
+    write(t / "verifier/reward.json", {"reward": 0.9, "gated": 0})
+    write(t / "verifier/report.json", {"success_rate": 0.9})
+    row = scan(tmp_path)[0]
+    record = row["extra"]["trials"][0]
+    assert row["reward"] == 0.4                  # embedded reward keeps precedence
+    assert row["success_rate"] == 0.25           # from the evaluate step, not root
+    assert record["gated"] is True
+
+
+def test_embedded_final_step_reward_finds_step_metadata_without_root_files(tmp_path):
+    """With no root reward/report, the embedded final-step reward must still surface the
+    step directory's success rate and gated flag (they previously disappeared)."""
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop"},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.4}}},
+    ])
+    write(t / "steps/evaluate/verifier/reward.json", {"reward": 0.4, "gated": 1})
+    write(t / "steps/evaluate/verifier/report.json", {"success_rate": 0.25})
+    row = scan(tmp_path)[0]
+    record = row["extra"]["trials"][0]
+    assert row["reward"] == 0.4
+    assert row["success_rate"] == 0.25
+    assert record["gated"] is True
+
+
+def test_embedded_reward_finished_development_uses_develop_step(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop", "verifier_result": {"rewards": {"reward": 0.8}}},
+    ])
+    write(t / "steps/develop/verifier/diagnosis.json", {"phase": "finished"})
+    write(t / "steps/develop/verifier/reward.json", {"reward": 0.8, "gated": 1})
+    write(t / "steps/develop/verifier/report.json", {"success_rate": 0.5})
+    write(t / "verifier/reward.json", {"reward": 0.1, "gated": 0})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.8
+    assert row["success_rate"] == 0.5
+    assert row["extra"]["trials"][0]["gated"] is True
+
+
+def test_embedded_reward_custom_step_name(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "verify", "verifier_result": {"rewards": {"reward": 0.3}}},
+    ])
+    write(t / "steps/verify/verifier/reward.json", {"reward": 0.3, "gated": 1})
+    write(t / "steps/verify/verifier/report.json", {"success_rate": 0.1})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.3
+    assert row["success_rate"] == 0.1
+    assert row["extra"]["trials"][0]["gated"] is True
