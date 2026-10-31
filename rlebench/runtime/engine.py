@@ -266,6 +266,9 @@ class Engine:
     async def next_trial(self):
         if self.mode != "task01" or self.s["phase"] != "evaluation":
             raise P.RequestError("Harbor controls the next trial", "wrong_phase")
+        # A trial that is still loading reports episode_over=True as a placeholder. Wait
+        # for it, or a loop that advances on episode_over skips the trial unplayed.
+        await self.wait_ready()
         if not self.s["episode_over"]:
             raise P.RequestError("finish the current trial first")
         self.s["trial"] += 1

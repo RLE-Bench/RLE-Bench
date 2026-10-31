@@ -312,6 +312,19 @@ def test_task01_session_collection_never_opens_another_trial(tmp_path, evaluate)
     run(scenario)
 
 
+def test_task01_next_trial_waits_for_loading_trial(tmp_path):
+    async def scenario():
+        e = Engine(tmp_path, config('task01'), FakeWorker)
+        status = await e.dispatch('end_development', {})
+        assert status['episode_over'] and not status['ready']
+        with pytest.raises(RequestError):
+            await e.dispatch('next_trial', {})
+        assert e.s['trial'] == 0 and not e.s['episode_over'] and not e.s['results']
+        await e.stop()
+        e.store.close()
+    run(scenario)
+
+
 def test_task01_initialization_failure_can_advance(tmp_path):
     async def scenario():
         e = Engine(tmp_path, config('task01'), FakeWorker)
