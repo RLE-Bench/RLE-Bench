@@ -20,6 +20,7 @@ import os
 import socket
 import sys
 import threading
+import traceback
 from typing import Any
 
 import numpy as np
@@ -152,13 +153,19 @@ def _plan_grasp(points: np.ndarray, segments: dict | None,
              for k, v in (segments or {}).items()}
     import torch
 
-    # SAM3's tracking predictor enters a bf16 autocast at build time and never exits
-    # it; CGN must not inherit it, or its float32 outputs come back as bfloat16.
+    # SAM3 leaves process-wide state that CGN must not inherit: a bf16 autocast (its
+    # float32 outputs would come back as bfloat16) and TF32 matmuls, whose error exceeds
+    # the squared ball-query radius, so a large cloud indexes out of range on the device.
+    tf32 = torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32
     with _GPU, torch.autocast("cuda" if _MODELS.get("device") == "cuda" else "cpu",
                               enabled=False):
-        grasps, scores, _, _ = _MODELS["cgn"].predict_scene_grasps(
-            cloud, pc_segments=parts, local_regions=bool(parts),
-            filter_grasps=bool(parts), forward_passes=1)
+        torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = False
+        try:
+            grasps, scores, _, _ = _MODELS["cgn"].predict_scene_grasps(
+                cloud, pc_segments=parts, local_regions=bool(parts),
+                filter_grasps=bool(parts), forward_passes=1)
+        finally:
+            torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32 = tf32
     # predict_scene_grasps returns dicts keyed by segment (or by -1 for the whole scene).
     flat_g = [g for group in grasps.values() for g in np.asarray(group).reshape(-1, 4, 4)]
     flat_s = [float(s) for group in scores.values() for s in np.asarray(group).reshape(-1)]
@@ -188,6 +195,14 @@ def handle(msg: dict) -> dict:
     raise ValueError(f"unknown op {op!r}")
 
 
+def _fatal(exc: Exception) -> bool:
+    """A CUDA error that poisons the context: every later call fails until a restart."""
+    import torch
+
+    return isinstance(exc, getattr(torch, "AcceleratorError", ())) or (
+        isinstance(exc, RuntimeError) and "CUDA error" in str(exc))
+
+
 def serve(path: str = SOCKET, once: bool = False) -> None:
     """Bind and answer. One connection at a time -- these calls are GPU-bound anyway, and
     the lock above already serialises the part that matters."""
@@ -207,14 +222,24 @@ def serve(path: str = SOCKET, once: bool = False) -> None:
             msg = P.LineReader(conn).read()
             if msg is None:
                 continue
+            fatal = False
             try:
                 reply = handle(msg)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 # Never die on a bad request: the agent can send anything, and a
                 # perception service that fell over would take the rest of the run with
-                # it while looking like a harness fault.
-                reply = {"ok": False, "error": "perception request failed"}
+                # it while looking like a harness fault. The cause goes to the private
+                # log only, which the verifier exports. A poisoned CUDA context is the
+                # exception: exit, and the launcher starts a fresh service.
+                traceback.print_exc()
+                sys.stderr.flush()
+                fatal = _fatal(exc)
+                reply = {"ok": False, "error": "perception service restarting; retry in about "
+                         "a minute" if fatal else "perception request failed"}
             P.send(conn, reply)
+            if fatal:
+                conn.close()
+                os._exit(1)
         except (ConnectionError, OSError, ValueError, P.ProtocolError):
             pass
         finally:

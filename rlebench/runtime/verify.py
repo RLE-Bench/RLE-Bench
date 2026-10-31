@@ -79,7 +79,7 @@ def export_media(root, output, state):
 
 def export_diagnostics(root, output):
     stop_agents(pwd.getpwnam("agent").pw_uid)
-    paths = [root / name for name in ("worker.log", "service.log", "verifier.log", "failures.jsonl")]
+    paths = [root / name for name in ("worker.log", "service.log", "perception.log", "verifier.log", "failures.jsonl")]
     export_files(output, "diagnostics", [p for p in paths if p.is_file() and not p.is_symlink()])
 
 
