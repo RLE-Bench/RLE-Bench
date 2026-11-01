@@ -52,7 +52,8 @@ class Engine:
                     last_request=self.s["last_request"], seconds_remaining=remaining,
                     interaction_budget=self.config["budget"], done=self.s["phase"] == "finished",
                     task=self.s["task"] if self.mode != "task02" or development else None,
-                    total_steps=sum(r["steps"] for i,r in self.s["results"].items() if int(i)<self.s["trial"])+self.s["episode_steps"])
+                    total_steps=self.s["episode_steps"] if self.mode in ("task01", "task02") else
+                    sum(r["steps"] for i,r in self.s["results"].items() if int(i)<self.s["trial"])+self.s["episode_steps"])
 
     def task_info(self):
         return {**self.status(), **self.config["public"], **self.info,

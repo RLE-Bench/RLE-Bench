@@ -325,6 +325,23 @@ def test_task01_next_trial_waits_for_loading_trial(tmp_path):
     run(scenario)
 
 
+def test_task01_total_steps_counts_current_episode(tmp_path):
+    async def scenario():
+        e = Engine(tmp_path, config('task01'), FakeWorker)
+        await e.dispatch('reset', {})
+        await e.dispatch('step', dict(actions=[[0, 0]]*2))
+        assert e.status()['total_steps'] == 2
+        await e.dispatch('end_development', {})
+        await e.dispatch('task_info', {})
+        await e.dispatch('step', dict(actions=[[0, 0]]*4))
+        await e.dispatch('next_trial', {})
+        await e.dispatch('step', dict(actions=[[0, 0]]))
+        assert e.status()['total_steps'] == e.status()['steps_used'] == 1
+        await e.stop()
+        e.store.close()
+    run(scenario)
+
+
 def test_task01_initialization_failure_can_advance(tmp_path):
     async def scenario():
         e = Engine(tmp_path, config('task01'), FakeWorker)
