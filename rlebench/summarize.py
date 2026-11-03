@@ -64,9 +64,18 @@ def _trial_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
 
 def _reward_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
     rewards = _object(_object(result.get("verifier_result")).get("rewards"))
-    if rewards:
-        return rewards, path / "verifier" / "reward.json"
     steps = result.get("step_results") or []
+    if rewards:
+        if isinstance(steps, list) and steps:
+            final = _object(steps[-1])
+            name = final.get("step_name")
+            # Harbor promotes final-step rewards to the trial result. An aggregate
+            # that differs from the final reward must retain trial-level metadata.
+            if (rewards == _object(final.get("verifier_result")).get("rewards")
+                    and isinstance(name, str) and name not in ("", ".", "..")
+                    and "/" not in name and "\\" not in name):
+                path = path / "steps" / name
+        return rewards, path / "verifier" / "reward.json"
     if isinstance(steps, list) and steps:
         final = _object(steps[-1])
         if final.get("step_name") == "develop":
@@ -93,6 +102,13 @@ def _reward_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
 def _trial_status(result: dict) -> tuple[str, str | None]:
     """Per-trial outcome and failure reason, from the trial's own result.json."""
     exc = result.get("exception_info")
+    steps = result.get("step_results")
+    if not exc and isinstance(steps, list):
+        # Harbor aborts on a step exception without a verifier result. Errors in
+        # steps that still produced a verifier result are recoverable.
+        exc = next((_object(step).get("exception_info") for step in reversed(steps)
+                    if _object(step).get("exception_info")
+                    and not _object(step).get("verifier_result")), None)
     error = None
     if isinstance(exc, dict):
         error = exc.get("exception_type") or exc.get("exception")

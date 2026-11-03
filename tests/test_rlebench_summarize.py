@@ -314,3 +314,66 @@ def test_embedded_reward_custom_step_name(tmp_path):
     assert row["reward"] == 0.3
     assert row["success_rate"] == 0.1
     assert row["extra"]["trials"][0]["gated"] is True
+
+
+@pytest.mark.parametrize("root_metadata", [False, True])
+@pytest.mark.parametrize("step_name", ["evaluate", "develop", "verify"])
+def test_promoted_final_reward_uses_step_metadata(tmp_path, root_metadata, step_name):
+    path = job(tmp_path, "run")
+    verifier = {"rewards": {"reward": 0.4, "gated": 1}}
+    t = trial(path, "trial", finished_at="done", verifier_result=verifier,
+              step_results=[{"step_name": step_name, "verifier_result": verifier}])
+    write(t / f"steps/{step_name}/verifier/diagnosis.json", {"phase": "finished"})
+    write(t / f"steps/{step_name}/verifier/reward.json", {"reward": 0.2, "gated": 1})
+    write(t / f"steps/{step_name}/verifier/report.json", {"success_rate": 0.25})
+    if root_metadata:
+        write(t / "verifier/reward.json", {"reward": 0.9, "gated": 0})
+        write(t / "verifier/report.json", {"success_rate": 0.9})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.4  # embedded rewards retain precedence over files
+    assert row["success_rate"] == 0.25
+    assert row["extra"]["trials"][0]["gated"] is True
+
+
+def test_aggregate_reward_keeps_trial_metadata(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done",
+              verifier_result={"rewards": {"reward": 0.5}}, step_results=[
+                  {"step_name": "first", "verifier_result": {"rewards": {"reward": 0.2}}},
+                  {"step_name": "last", "verifier_result": {"rewards": {"reward": 0.8}}},
+              ])
+    write(t / "verifier/reward.json", {"reward": 0.5, "gated": 0})
+    write(t / "verifier/report.json", {"success_rate": 0.5})
+    write(t / "steps/last/verifier/reward.json", {"reward": 0.8, "gated": 1})
+    write(t / "steps/last/verifier/report.json", {"success_rate": 0.8})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.5
+    assert row["success_rate"] == 0.5
+    assert row["extra"]["trials"][0]["gated"] is False
+
+
+@pytest.mark.parametrize("finished", [False, True])
+def test_unverified_step_failure_is_reported(tmp_path, finished):
+    path = job(tmp_path, "run", finished=finished)
+    trial(path, "trial", started_at="start", finished_at="done" if finished else None,
+          exception_info=None, step_results=[
+              {"step_name": "develop", "verifier_result": {"rewards": {"reward": 1}}},
+              {"step_name": "evaluate", "verifier_result": None,
+               "exception_info": {"exception_type": "VerifierTimeoutError"}},
+          ])
+    record = scan(tmp_path)[0]["extra"]["trials"][0]
+    assert record["status"] == "failed"
+    assert record["error"] == "VerifierTimeoutError"
+
+
+@pytest.mark.parametrize("top_error", [None, {"exception_type": "CleanupError"}])
+def test_verified_step_error_can_recover(tmp_path, top_error):
+    path = job(tmp_path, "run")
+    trial(path, "trial", finished_at="done", exception_info=top_error, step_results=[
+        {"step_name": "develop", "exception_info": {"exception_type": "AgentTimeoutError"},
+         "verifier_result": {"rewards": {"reward": 0.4}}},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.5}}},
+    ])
+    record = scan(tmp_path)[0]["extra"]["trials"][0]
+    assert record["status"] == ("failed" if top_error else "completed")
+    assert record["error"] == ("CleanupError" if top_error else None)
