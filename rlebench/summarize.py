@@ -47,40 +47,103 @@ def _cost(result: dict, trials: list[dict]) -> float | None:
     return _sum(context.get("cost_usd") for context in contexts)
 
 
-def _trial_scores(path: Path, result: dict) -> dict:
-    """Rewards, plus the scalar metrics a task reports beside them.
+def _trial_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
+    """(Rewards plus the scalar metrics a task reports beside them, the reward.json read).
 
     reward.json carries the total only; a family that also writes report.json (success
     rates, episode counts, parameter budgets) would otherwise summarise as reward alone."""
-    scores = dict(_reward_scores(path, result))
-    for key, value in _object(read_json(path / "verifier" / "report.json")).items():
+    scores, reward_file = _reward_scores(path, result)
+    scores = dict(scores)
+    report = read_json((reward_file.parent if reward_file else path / "verifier") / "report.json")
+    for key, value in _object(report).items():
         number = _number(value)
         if number is not None and key not in scores:
             scores[key] = number
-    return scores
+    return scores, reward_file
 
 
-def _reward_scores(path: Path, result: dict) -> dict:
+def _reward_scores(path: Path, result: dict) -> tuple[dict, Path | None]:
     rewards = _object(_object(result.get("verifier_result")).get("rewards"))
-    if rewards:
-        return rewards
     steps = result.get("step_results") or []
+    if rewards:
+        if isinstance(steps, list) and steps:
+            final = _object(steps[-1])
+            name = final.get("step_name")
+            # Harbor promotes final-step rewards to the trial result. An aggregate
+            # that differs from the final reward must retain trial-level metadata.
+            if (rewards == _object(final.get("verifier_result")).get("rewards")
+                    and isinstance(name, str) and name not in ("", ".", "..")
+                    and "/" not in name and "\\" not in name):
+                path = path / "steps" / name
+        return rewards, path / "verifier" / "reward.json"
     if isinstance(steps, list) and steps:
         final = _object(steps[-1])
         if final.get("step_name") == "develop":
             diagnosis = _object(read_json(path / "steps/develop/verifier/diagnosis.json"))
             if diagnosis.get("phase") != "finished":
-                return _object(read_json(path / "steps/evaluate/verifier/reward.json"))
+                file = path / "steps/evaluate/verifier/reward.json"
+                return _object(read_json(file)), file
         rewards = _object(_object(final.get("verifier_result")).get("rewards"))
-        if rewards:
-            return rewards
         name = final.get("step_name")
         if isinstance(name, str) and name not in (".", "..") and "/" not in name:
             path = path / "steps" / name
+        # Select the final step directory before resolving embedded rewards, so the
+        # reward file (and its sibling report.json / gated flag) are read from that
+        # step rather than from the trial root.
+        if rewards:
+            return rewards, path / "verifier" / "reward.json"
     elif (path / "steps").is_dir():
         diagnosis = _object(read_json(path / "steps/develop/verifier/diagnosis.json"))
         path = path / "steps" / ("develop" if diagnosis.get("phase") == "finished" else "evaluate")
-    return _object(read_json(path / "verifier" / "reward.json"))
+    file = path / "verifier" / "reward.json"
+    return _object(read_json(file)), file
+
+
+def _trial_status(result: dict) -> tuple[str, str | None]:
+    """Per-trial outcome and failure reason, from the trial's own result.json."""
+    exc = result.get("exception_info")
+    steps = result.get("step_results")
+    if not exc and isinstance(steps, list):
+        # Harbor aborts on a step exception without a verifier result. Errors in
+        # steps that still produced a verifier result are recoverable.
+        exc = next((_object(step).get("exception_info") for step in reversed(steps)
+                    if _object(step).get("exception_info")
+                    and not _object(step).get("verifier_result")), None)
+    error = None
+    if isinstance(exc, dict):
+        error = exc.get("exception_type") or exc.get("exception")
+    elif isinstance(exc, str) and exc:
+        error = exc
+    if error:
+        return "failed", error
+    if result.get("finished_at"):
+        return "completed", None
+    if result.get("started_at"):
+        return "running", None
+    return "unknown", None
+
+
+def _trial_record(path: Path, result: dict) -> dict:
+    """One trial row for summary.json: outcome, timing, failure reason, rewards.
+
+    Downstream receipt consumers (see issue #7) need per-trial failure reasons that
+    the job-level status collapses away; the table rendering ignores these fields."""
+    rewards, reward_file = _trial_scores(path, result)
+    gated = None
+    if reward_file is not None:
+        reward_json = read_json(reward_file)
+        if isinstance(reward_json, dict) and "gated" in reward_json:
+            gated = bool(reward_json["gated"])
+    status, error = _trial_status(result)
+    return {
+        "trial": path.name,
+        "status": status,
+        "started_at": result.get("started_at"),
+        "finished_at": result.get("finished_at"),
+        "error": error,
+        "gated": gated,
+        "rewards": rewards,
+    }
 
 
 def _metric(stats: dict, trials: list[dict], key: str) -> float | None:
@@ -190,7 +253,8 @@ def scan(root: Path) -> list[dict]:
             continue
         children.clear()
         results = [_object(read_json(t / "result.json")) for t in trials]
-        scores = [_trial_scores(t, r) for t, r in zip(trials, results)]
+        trial_records = [_trial_record(t, r) for t, r in zip(trials, results)]
+        scores = [rec["rewards"] for rec in trial_records]
         agent, model = _identity(config, results)
         stats = _object(result.get("stats"))
         metrics = _metrics(stats, scores)
@@ -207,10 +271,7 @@ def scan(root: Path) -> list[dict]:
                 "finished_at": result.get("finished_at"),
                 "n_total_trials": result.get("n_total_trials", len(trials)),
                 "progress": {key: value for key, value in stats.items() if key.startswith("n_")},
-                "trials": [
-                    {"trial": trial.name, "rewards": score}
-                    for trial, score in zip(trials, scores)
-                ],
+                "trials": trial_records,
             },
         })
     return _json_safe(jobs)

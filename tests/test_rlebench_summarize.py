@@ -202,6 +202,45 @@ def test_cli_groups_jobs_without_averaging_group_means(tmp_path, capsys, monkeyp
         cli.main(["summarize", str(bad)])
 
 
+def test_trial_rows_carry_outcome_failure_reason_and_timing(tmp_path):
+    path = job(tmp_path, "run", stats={"n_completed_trials": 1, "n_errored_trials": 1})
+    ok = trial(path, "good", {"reward": 0.7},
+               started_at="2026-09-09T10:00:00", finished_at="2026-09-09T10:30:00")
+    write(ok / "verifier/reward.json", {"reward": 0.7, "gated": 0})
+    trial(path, "boom",
+          started_at="2026-09-09T11:00:00", finished_at="2026-09-09T11:05:00",
+          exception_info={"exception_type": "ApiError", "exception": "rate limited"})
+    rows = scan(tmp_path)
+    assert len(rows) == 1
+    trials = rows[0]["extra"]["trials"]
+    assert [t["trial"] for t in trials] == ["boom", "good"]
+    assert trials[1]["status"] == "completed" and trials[1]["error"] is None
+    assert trials[1]["started_at"] == "2026-09-09T10:00:00"
+    assert trials[1]["finished_at"] == "2026-09-09T10:30:00"
+    assert trials[1]["gated"] is False and trials[1]["rewards"]["reward"] == 0.7
+    assert trials[0]["status"] == "failed" and trials[0]["error"] == "ApiError"
+    assert trials[0]["finished_at"] == "2026-09-09T11:05:00"
+    # a saved summary must round-trip the per-trial rows unchanged
+    import json as _json
+    from rlebench import summarize as summarizer
+    root = tmp_path / "jobs"
+    (tmp_path / "run").rename(root)
+    assert summarizer.summarize(root) == 0
+    saved = _json.loads((root / "summary.json").read_text())
+    saved_trials = saved["runs"][0]["extra"]["trials"]
+    assert saved_trials[0]["status"] == "failed" and saved_trials[0]["error"] == "ApiError"
+    assert saved_trials[1]["rewards"]["reward"] == 0.7
+
+
+def test_running_trial_without_finish(tmp_path):
+    path = job(tmp_path, "run", stats={"n_running_trials": 1}, finished=False)
+    trial(path, "live", started_at="2026-09-09T10:00:00")
+    rows = scan(tmp_path)
+    trial_row = rows[0]["extra"]["trials"][0]
+    assert trial_row["status"] == "running" and trial_row["finished_at"] is None
+    assert trial_row["error"] is None and trial_row["gated"] is None
+
+
 def test_completed_single_step_development_reward(tmp_path):
     path = job(tmp_path, 'single-step')
     t = trial(path, 'trial', finished_at='done', step_results=[{'step_name': 'develop'}])
@@ -210,3 +249,131 @@ def test_completed_single_step_development_reward(tmp_path):
     assert scan(tmp_path)[0]['reward'] == .8
     write(t / 'result.json', {})
     assert scan(tmp_path)[0]['reward'] == .8
+
+
+def test_embedded_final_step_reward_ignores_conflicting_root_metadata(tmp_path):
+    """A reward embedded in the final step must resolve gated/report metrics from that
+    step's directory, not the trial root."""
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop"},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.4}}},
+    ])
+    write(t / "steps/evaluate/verifier/reward.json", {"reward": 0.4, "gated": 1})
+    write(t / "steps/evaluate/verifier/report.json", {"success_rate": 0.25})
+    # conflicting metadata left at the trial root must not win
+    write(t / "verifier/reward.json", {"reward": 0.9, "gated": 0})
+    write(t / "verifier/report.json", {"success_rate": 0.9})
+    row = scan(tmp_path)[0]
+    record = row["extra"]["trials"][0]
+    assert row["reward"] == 0.4                  # embedded reward keeps precedence
+    assert row["success_rate"] == 0.25           # from the evaluate step, not root
+    assert record["gated"] is True
+
+
+def test_embedded_final_step_reward_finds_step_metadata_without_root_files(tmp_path):
+    """With no root reward/report, the embedded final-step reward must still surface the
+    step directory's success rate and gated flag (they previously disappeared)."""
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop"},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.4}}},
+    ])
+    write(t / "steps/evaluate/verifier/reward.json", {"reward": 0.4, "gated": 1})
+    write(t / "steps/evaluate/verifier/report.json", {"success_rate": 0.25})
+    row = scan(tmp_path)[0]
+    record = row["extra"]["trials"][0]
+    assert row["reward"] == 0.4
+    assert row["success_rate"] == 0.25
+    assert record["gated"] is True
+
+
+def test_embedded_reward_finished_development_uses_develop_step(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "develop", "verifier_result": {"rewards": {"reward": 0.8}}},
+    ])
+    write(t / "steps/develop/verifier/diagnosis.json", {"phase": "finished"})
+    write(t / "steps/develop/verifier/reward.json", {"reward": 0.8, "gated": 1})
+    write(t / "steps/develop/verifier/report.json", {"success_rate": 0.5})
+    write(t / "verifier/reward.json", {"reward": 0.1, "gated": 0})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.8
+    assert row["success_rate"] == 0.5
+    assert row["extra"]["trials"][0]["gated"] is True
+
+
+def test_embedded_reward_custom_step_name(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done", step_results=[
+        {"step_name": "verify", "verifier_result": {"rewards": {"reward": 0.3}}},
+    ])
+    write(t / "steps/verify/verifier/reward.json", {"reward": 0.3, "gated": 1})
+    write(t / "steps/verify/verifier/report.json", {"success_rate": 0.1})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.3
+    assert row["success_rate"] == 0.1
+    assert row["extra"]["trials"][0]["gated"] is True
+
+
+@pytest.mark.parametrize("root_metadata", [False, True])
+@pytest.mark.parametrize("step_name", ["evaluate", "develop", "verify"])
+def test_promoted_final_reward_uses_step_metadata(tmp_path, root_metadata, step_name):
+    path = job(tmp_path, "run")
+    verifier = {"rewards": {"reward": 0.4, "gated": 1}}
+    t = trial(path, "trial", finished_at="done", verifier_result=verifier,
+              step_results=[{"step_name": step_name, "verifier_result": verifier}])
+    write(t / f"steps/{step_name}/verifier/diagnosis.json", {"phase": "finished"})
+    write(t / f"steps/{step_name}/verifier/reward.json", {"reward": 0.2, "gated": 1})
+    write(t / f"steps/{step_name}/verifier/report.json", {"success_rate": 0.25})
+    if root_metadata:
+        write(t / "verifier/reward.json", {"reward": 0.9, "gated": 0})
+        write(t / "verifier/report.json", {"success_rate": 0.9})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.4  # embedded rewards retain precedence over files
+    assert row["success_rate"] == 0.25
+    assert row["extra"]["trials"][0]["gated"] is True
+
+
+def test_aggregate_reward_keeps_trial_metadata(tmp_path):
+    path = job(tmp_path, "run")
+    t = trial(path, "trial", finished_at="done",
+              verifier_result={"rewards": {"reward": 0.5}}, step_results=[
+                  {"step_name": "first", "verifier_result": {"rewards": {"reward": 0.2}}},
+                  {"step_name": "last", "verifier_result": {"rewards": {"reward": 0.8}}},
+              ])
+    write(t / "verifier/reward.json", {"reward": 0.5, "gated": 0})
+    write(t / "verifier/report.json", {"success_rate": 0.5})
+    write(t / "steps/last/verifier/reward.json", {"reward": 0.8, "gated": 1})
+    write(t / "steps/last/verifier/report.json", {"success_rate": 0.8})
+    row = scan(tmp_path)[0]
+    assert row["reward"] == 0.5
+    assert row["success_rate"] == 0.5
+    assert row["extra"]["trials"][0]["gated"] is False
+
+
+@pytest.mark.parametrize("finished", [False, True])
+def test_unverified_step_failure_is_reported(tmp_path, finished):
+    path = job(tmp_path, "run", finished=finished)
+    trial(path, "trial", started_at="start", finished_at="done" if finished else None,
+          exception_info=None, step_results=[
+              {"step_name": "develop", "verifier_result": {"rewards": {"reward": 1}}},
+              {"step_name": "evaluate", "verifier_result": None,
+               "exception_info": {"exception_type": "VerifierTimeoutError"}},
+          ])
+    record = scan(tmp_path)[0]["extra"]["trials"][0]
+    assert record["status"] == "failed"
+    assert record["error"] == "VerifierTimeoutError"
+
+
+@pytest.mark.parametrize("top_error", [None, {"exception_type": "CleanupError"}])
+def test_verified_step_error_can_recover(tmp_path, top_error):
+    path = job(tmp_path, "run")
+    trial(path, "trial", finished_at="done", exception_info=top_error, step_results=[
+        {"step_name": "develop", "exception_info": {"exception_type": "AgentTimeoutError"},
+         "verifier_result": {"rewards": {"reward": 0.4}}},
+        {"step_name": "evaluate", "verifier_result": {"rewards": {"reward": 0.5}}},
+    ])
+    record = scan(tmp_path)[0]["extra"]["trials"][0]
+    assert record["status"] == ("failed" if top_error else "completed")
+    assert record["error"] == ("CleanupError" if top_error else None)
