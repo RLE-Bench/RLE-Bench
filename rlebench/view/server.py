@@ -94,10 +94,6 @@ def create_app(root: Path):
     def media_file(job: str, trial: str, name: str, step: str | None = None):
         return send(step_dir(job, trial, step) / "verifier" / "media" / one_segment(name), name)
 
-    @app.get("/api/jobs/{job:path}/trials/{trial}/debug/{name}")
-    def debug_file(job: str, trial: str, name: str):
-        return send(trial_dir(job, trial) / "debug" / "episodes" / one_segment(name), name)
-
     @app.get("/api/jobs/{job:path}/trials/{trial}")
     def trial(job: str, trial: str, step: str | None = None) -> dict:
         t = trial_dir(job, trial)

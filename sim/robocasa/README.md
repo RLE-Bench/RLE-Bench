@@ -44,7 +44,7 @@ Future simulators get a sibling directory (`sim/<name>/`).
 **User mode — you want to run a task.** You need the simulator image and the
 asset dataset. `make sim-robocasa` provides both (the dataset lands at
 `third_party/robocasa/robocasa/models/assets`), and `rlebench prepare task01|task02`
-runs it first. The `rlebench` run lanes point the compose overlay at that path unless
+runs it first. `rlebench run` points the compose overlay at that path unless
 `ROBOCASA_ASSET_DIR` is set; a direct `harbor run` needs the export:
 
 ```sh
@@ -52,7 +52,7 @@ make sim-robocasa                          # simulator image + dataset (+ dev ve
 make task02                                # the task's agent images
 
 ROBOCASA_ASSET_DIR=$PWD/third_party/robocasa/robocasa/models/assets \
-    harbor run -p tasks/task02 -i 01-washing-dishes -a oracle --override-gpus 0 --yes
+    harbor run -p tasks/task02 -i 01-washing-dishes -a oracle --yes
 ```
 
 A dataset elsewhere (a SquashFS from `assets mount`, a shared copy) is used by

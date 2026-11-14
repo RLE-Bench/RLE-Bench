@@ -12,5 +12,4 @@ images = ["rlebench-task04-agent:dev", "rlebench-task04-verifier:dev"]
 paths = ["tasks/task04/01-dance", "third_party/motiontrack/unitree_g1/g1.xml", "third_party/motiontrack/lafan1/.rev"]
 
 [run]
-lane = "environment-host"
 gpu = true

@@ -21,10 +21,9 @@ def test_unique_bare_subtask_name_resolves():
 
 
 def test_every_subtask_takes_one_gpu_from_the_default_slot_placement():
-    """No `gpu_env`, so `rlebench run --device cuda:N` fills ${RLEBENCH_GPU} per cell."""
+    """`rlebench run --device cuda:N` fills ${RLEBENCH_GPU} per cell."""
     family = families()["task05"]
     assert family.run_cfg["gpu"] is True
-    assert "gpu_env" not in family.run_cfg
     for target in family.targets():
         compose = (family.dir / target.name.rsplit("/", 1)[-1] /
                    "environment" / "docker-compose.yaml").read_text()

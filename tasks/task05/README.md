@@ -96,12 +96,11 @@ At run time the cells mount only these read-only directories, readable by uids 1
 
 ```bash
 rlebench run task05/01-libero-open-design -a <agent> -m <model> -d cuda:0
-harbor run -p tasks/task05/03-robotwin-open-design -a oracle --override-gpus 0 --yes
+harbor run -p tasks/task05/03-robotwin-open-design -a oracle
 ```
 
-`rlebench run` fills `RLEBENCH_GPU`, opens the model API through the agent-host lane and
-passes `--override-gpus 0`; the compose overlays attach that one device to the agent
-container and the evaluation service. The Oracle solves each cell with a reference recipe
+`rlebench run` fills `RLEBENCH_GPU` and opens the model API for the agent phase; the
+compose overlays attach that one device to the agent container and the evaluation service. The Oracle solves each cell with a reference recipe
 under `subtasks/<slug>/solution/`; it is trusted material and never enters an image.
 
 `make test TASK=task05` runs the host-side contract and isolation checks.

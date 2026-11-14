@@ -85,11 +85,11 @@ rlebench run task04 -a <agent> -m <model> -d cuda:0 cuda:1  # all five
 rlebench run task04/01-dance -a oracle                       # the reference PPO
 ```
 
-By hand, `RLEBENCH_GPU` picks the card and `--override-gpus 0` lets the compose
-overlay attach it:
+By hand, `RLEBENCH_GPU` picks the card (0 by default); agents other than the
+Oracle need the hosts they install from, which `rlebench run --dry-run` prints:
 
 ```bash
-RLEBENCH_GPU=1 harbor run -p tasks/task04 -i 02-fight -a <agent> -m <model> --override-gpus 0
+RLEBENCH_GPU=1 harbor run -p tasks/task04 -i 01-dance -a oracle
 ```
 
 Set `ORACLE_MINUTES` to a small number to smoke-test the Oracle plumbing.

@@ -186,7 +186,7 @@ const when = iso => iso ? iso.replace("T", " ").slice(0, 16) + (iso.endsWith("Z"
 const dur = (a, b) => { if (!a || !b) return "—"; const s = Math.round((new Date(b) - new Date(a)) / 1000); return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`; };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const api = (job, trial, sub = "", step = null) => `/api/jobs/${job.split("/").map(encodeURIComponent).join("/")}/trials/${encodeURIComponent(trial)}${sub}${step ? (sub.includes("?") ? "&" : "?") + "step=" + encodeURIComponent(step) : ""}`;
-const firstTab = t => (t.media || t.debug_episodes) ? "media" : (t.trajectory ? "trajectory" : "verifier");
+const firstTab = t => t.media ? "media" : (t.trajectory ? "trajectory" : "verifier");
 
 let JOBS = [], current = null, detail = null, tab = "media";
 const cache = {};
@@ -216,7 +216,7 @@ function rail() {
       const b = document.createElement("button"); b.className = "trial";
       const isCur = current && current.job === j.job && current.trial === t.trial;
       b.setAttribute("aria-current", isCur ? "true" : "false");
-      const media = t.media ? `<span class="chip media"><i></i>${t.media}</span>` : t.debug_episodes ? `<span class="chip media" title="debug recordings"><i></i>${t.debug_episodes} dbg</span>` : t.media_skipped ? `<span class="chip warn">skipped</span>` : `<span class="chip none">no media</span>`;
+      const media = t.media ? `<span class="chip media"><i></i>${t.media}</span>` : t.media_skipped ? `<span class="chip warn">skipped</span>` : `<span class="chip none">no media</span>`;
       b.innerHTML = `<span class="tname" title="${esc(t.trial)}">${esc(t.trial)}</span><span class="r">${fmt(t.reward)}</span>${media}`;
       b.onclick = () => select(j.job, t.trial);
       d.appendChild(b);
@@ -267,7 +267,7 @@ async function panel() {
   const set = html => { if (p.isConnected) { p.innerHTML = html; wire(p); } };
   if (tab === "media") set(mediaPanel(t));
   else if (tab === "reward") set(rewardPanel(t));
-  else if (tab === "files") set(`<ul class="files">${t.files.map(f => `<li class="${/(^|\/)verifier\/media\/|^debug\/episodes\//.test(f.path) ? "media-file" : ""}"><span>${esc(f.path)}</span><span class="sz">${kb(f.bytes)}</span></li>`).join("")}</ul>`);
+  else if (tab === "files") set(`<ul class="files">${t.files.map(f => `<li class="${/(^|\/)verifier\/media\//.test(f.path) ? "media-file" : ""}"><span>${esc(f.path)}</span><span class="sz">${kb(f.bytes)}</span></li>`).join("")}</ul>`);
   else if (tab === "verifier") {
     const out = await cached(api(t.job, t.trial, "/verifier-output", t.step));
     set(`<div class="pre-head"><span>${t.step ? `steps/${esc(t.step)}/` : ""}verifier/test-stdout.txt</span><span>${t.stdout_lines} lines</span></div><pre>${esc(out.stdout ?? "(no test-stdout.txt)")}</pre>`
@@ -282,12 +282,11 @@ async function panel() {
 async function cached(url) { if (!cache[url]) cache[url] = await getJSON(url); return cache[url]; }
 
 function mediaPanel(t) {
-  const idx = t.media_index, debug = t.debug_episode_files || [];
+  const idx = t.media_index;
   const where = t.step ? `steps/${esc(t.step)}/verifier/media/` : "verifier/media/";
   let h = "";
   if (!idx) h += `<div class="empty">This step wrote no media. Verifiers that render write <code>${where}index.json</code>; this tab reads that file and nothing else. Runs from before the render stack have none.</div>`;
   else h += verifierMedia(t, idx, where);
-  if (debug.length) h += `<div class="section">debug recordings</div><div class="index-line"><span><code>debug/episodes/</code>, an operator's RLEBENCH_DEBUG run: the agent's cameras per episode, development and evaluation</span></div><div class="clips">${debug.map(n => `<figure class="clip"><video controls preload="metadata" src="${api(t.job, t.trial, "/debug/" + encodeURIComponent(n))}"></video><figcaption><code>${esc(n)}</code><span>${kb(sizeOf(t, "debug/episodes/" + n))}</span></figcaption></figure>`).join("")}</div>`;
   return h;
 }
 
@@ -303,7 +302,7 @@ function verifierMedia(t, idx, where) {
   return h;
 }
 function sizeOf(t, name) {
-  const rel = name.startsWith("debug/") ? name : (t.step ? `steps/${t.step}/` : "") + "verifier/media/" + name;
+  const rel = (t.step ? `steps/${t.step}/` : "") + "verifier/media/" + name;
   const f = t.files.find(f => f.path === rel); return f ? f.bytes : null;
 }
 

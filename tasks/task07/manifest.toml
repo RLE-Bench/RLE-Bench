@@ -11,5 +11,4 @@ images = ["rlebench-task07-agent:dev", "rlebench-task07-verifier:dev"]
 paths = ["tasks/task07/tests/score_task.py"]
 
 [run]
-lane = "environment-host"
 gpu = false

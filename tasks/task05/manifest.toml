@@ -34,7 +34,6 @@ paths = ["tasks/task05/harness", "sim/libero", "sim/robotwin", "third_party/robo
 
 [run]
 # Assets are per subtask, so the compose overlays require them (`${VAR:?...}`)
-# instead of a family-wide `requires_env`. The agent phase is an empty allowlist
-# plus the model API; every cell takes one GPU through `${RLEBENCH_GPU:-0}`.
-lane = "agent-host"
+# instead of a family-wide `requires_env`. Every cell takes one GPU through
+# `${RLEBENCH_GPU:-0}`.
 gpu = true

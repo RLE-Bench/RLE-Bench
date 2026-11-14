@@ -1,8 +1,8 @@
-"""The rlebench CLI: target resolution, configs, and the harbor argv per lane.
+"""The rlebench CLI: target resolution, configs, and the harbor argv per family.
 
 `rlebench run <target>... -a <agent> [-m model] [-e vendor/lane] [--device dev...]`.
-rlebench owns only what harbor cannot know about a task (egress lane, GPU
-override, resume, closed-book, dataset mount, device placement); everything
+rlebench owns only what harbor cannot know about a task (install and API hosts,
+resume, closed-book, dataset mount, device placement); everything
 else is passed through. A recipe change is a behavior change: update the
 expectations here with one.
 """
@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from rlebench import cli, providers  # noqa: E402
-from rlebench.repo import families, resolve  # noqa: E402
+from rlebench.repo import families, read_task_toml, resolve  # noqa: E402
 
 # Emit only the task01 level and task02 group these CLI tests exercise.
 _EMITTERS = (
@@ -82,8 +82,8 @@ def test_config_defaults_and_aliases():
     r = providers.resolve("codex", "openai/gpt-5.6-sol", None, {"OPENAI_API_KEY": "k"})
     assert (r.agent, r.config, r.api_hosts) == ("codex", "openai/api", ["api.openai.com"])
     r = providers.resolve("agy", "gemini-3.7-flash", None, {"GEMINI_API_KEY": "k"})
-    assert r.agent.endswith(":GeminiApiAntigravityCli") and r.config == "gemini/api"
-    assert r.model == "google/gemini-3.7-flash"
+    assert r.agent.endswith(":ClosedBookAntigravityCli") and r.config == "gemini/api"
+    assert (r.model, r.harbor_model) == ("google/gemini-3.7-flash", "gemini/gemini-3.7-flash")
     r = providers.resolve("oracle", None, None, {})
     assert (r.agent, r.model, r.closed_book) == ("oracle", "", [])
 
@@ -120,7 +120,6 @@ def test_kimi_lanes_through_claude_code(config, key, host, cred):
     assert r.api_hosts == [host] and r.model == "kimi/k3[1m]" and r.harbor_model == "k3[1m]"
     assert r.exports[cred] == "secret" and r.exports["ANTHROPIC_BASE_URL"].startswith(f"https://{host}/")
     assert r.agent_envs[0] == f"{cred}=${{{cred}}}"
-    assert r.exports["ANTHROPIC_DEFAULT_FABLE_MODEL"] == "k3[1m]"
     with pytest.raises(SystemExit):
         providers.resolve("kimi-cli", "kimi/k3", config, {key: "secret"})
 
@@ -130,7 +129,6 @@ def test_deepseek_lane_through_claude_code():
     assert r.api_hosts == ["api.deepseek.com"] and r.harbor_model == "deepseek-flash"
     assert r.exports["ANTHROPIC_AUTH_TOKEN"] == "d"
     assert r.exports["ANTHROPIC_BASE_URL"] == "https://api.deepseek.com/anthropic"
-    assert r.exports["ANTHROPIC_DEFAULT_FABLE_MODEL"] == "deepseek-flash"
     assert "ANTHROPIC_API_KEY" in r.unsets and r.agent_envs[-1] == "CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000"
     assert r.agent_kwargs == ["reasoning_effort=high"]
     with pytest.raises(SystemExit):
@@ -159,7 +157,33 @@ def test_zai_lanes():
     r = providers.resolve("cc", "zai/glm-5.3-flash", "zai/api", {"ZAI_API_KEY": "z"})
     assert r.model == "zai/glm-5.3-flash" and r.harbor_model == "glm-5.3-flash"
     assert r.exports["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000" and r.agent_kwargs == ["reasoning_effort=high"]
-    assert "ANTHROPIC_API_KEY" in r.unsets and r.exports["ANTHROPIC_DEFAULT_FABLE_MODEL"] == "glm-5.3-flash"
+    assert "ANTHROPIC_API_KEY" in r.unsets
+
+
+@pytest.mark.parametrize("agent, config, model, env", [
+    ("cc", "anthropic/api", "anthropic/claude-opus-5", {"ANTHROPIC_API_KEY": "k"}),
+    ("cc", "anthropic/claude-code", "anthropic/claude-opus-5", {"CLAUDE_CODE_OAUTH_TOKEN": "t"}),
+    ("cc", "zai/api", "zai/glm-5.2", {"ZAI_API_KEY": "z"}),
+    ("codex", "openai/api", "openai/gpt-5.6-sol", {"OPENAI_API_KEY": "k"}),
+    ("codex", "openai/codex", "openai/gpt-5.6-sol", {"CODEX_FORCE_AUTH_JSON": "1"}),
+    ("agy", "gemini/api", "gemini-3.7-flash", {"GEMINI_API_KEY": "k"}),
+    ("grok", "xai/api", "xai/grok-4.6", {"XAI_API_KEY": "x"}),
+    ("grok", "xai/grok-build", "xai/grok-4.6", {"GROK_FORCE_AUTH_JSON": "1"}),
+])
+def test_every_lane_states_its_web_switch(agent, config, model, env):
+    # Harbor disables web tools on a restricted network unless the switch is explicit.
+    r = providers.resolve(agent, model, config, env)
+    assert (r.closed_book, r.open_book) == (["disable_web_search=true"], ["disable_web_search=false"])
+
+
+def test_custom_endpoints_need_no_harbor_workarounds():
+    r = providers.resolve("cc", "anthropic/claude-opus-5", None,
+                          {"ANTHROPIC_AUTH_TOKEN": "t", "ANTHROPIC_BASE_URL": "https://proxy.example/anthropic"})
+    assert r.agent_envs == [] and r.api_hosts == ["proxy.example"]
+    r = providers.resolve("codex", "served-alias", None, {"OPENAI_API_KEY": "k", "OPENAI_API_BASE": "https://proxy.example/v1"})
+    assert r.exports == {} and r.api_hosts == ["proxy.example"]
+    r = providers.resolve("cc", "zai/glm-5.2", "zai/api", {"ZAI_API_KEY": "z"})
+    assert "ANTHROPIC_DEFAULT_FABLE_MODEL" not in r.exports
 
 
 # --- argv per lane ----------------------------------------------------------------
@@ -173,24 +197,26 @@ def _run(argv: list[str], monkeypatch, **env: str):
     return cli.build_run(ns, ns.extra)
 
 
-def test_environment_host_lane_task08(monkeypatch):
+def test_restricted_environment_opens_install_hosts_task08(monkeypatch):
     targets, (inv,), workers = _run(["task08", "-a", "claude-code", "-m", "anthropic/claude-opus-5"], monkeypatch,
                                     ANTHROPIC_API_KEY="k")
     assert workers == 1
     assert inv.argv == [
         "harbor", "run", "-p", "tasks/task08", "-a", "claude-code", "-m", "anthropic/claude-opus-5",
         "-o", "jobs/task08/claude-code", "--job-name", "anthropic_claude-opus-5",
+        "--allow-agent-host", "api.anthropic.com",
         "--allow-environment-host", "deb.debian.org",
         "--allow-environment-host", "downloads.claude.ai",
         "--allow-environment-host", "statsig.anthropic.com",
         "--allow-environment-host", "api.anthropic.com",
-        "--ak", "disallowed_tools=WebSearch,WebFetch",
+        "--ak", "disable_web_search=true",
+        "--yes",
     ]
     assert inv.console_log is None and inv.label.startswith("[cpu] task08 ->")
-    assert inv.env["ROBOCASA_ASSET_DIR"] == IN_TREE_ASSETS and "RLEBENCH_DEBUG" not in inv.env
+    assert inv.env["ROBOCASA_ASSET_DIR"] == IN_TREE_ASSETS
 
 
-def test_agent_host_lane_task01_with_gpu_pool(monkeypatch):
+def test_public_environment_task01_with_gpu_pool(monkeypatch):
     targets, invs, workers = _run(
         ["task01/L1", "-a", "codex", "-m", "openai/gpt-5.6-sol", "--device", "cuda:0", "cuda:1"],
         monkeypatch, OPENAI_API_KEY="k",
@@ -202,11 +228,10 @@ def test_agent_host_lane_task01_with_gpu_pool(monkeypatch):
         "-a", "codex", "-m", "openai/gpt-5.6-sol",
         "-o", "jobs/task01/L1/01-open-fridge/codex", "--job-name", "openai_gpt-5.6-sol",
         "--allow-agent-host", "api.openai.com",
-        "--ak", "web_search=disabled",
-        "--override-gpus", "0", "--yes",
+        "--ak", "disable_web_search=true",
+        "--yes",
     ]
     assert [i.env["RLEBENCH_GPU"] for i in invs[:4]] == ["0", "1", "0", "1"]
-    assert inv.env["RLEBENCH_DEBUG"] == "1"
     assert inv.console_log == REPO / "jobs/task01/L1/01-open-fridge/codex/openai_gpt-5.6-sol.console.log"
 
 
@@ -215,9 +240,9 @@ def test_oracle_has_no_model_config_or_resume(monkeypatch):
     assert t06.argv == [
         "harbor", "run", "-p", "tasks/task06/method-agnostic", "-a", "oracle",
         "-o", "jobs/task06/method-agnostic/oracle", "--job-name", "oracle",
-        "--override-gpus", "0", "--yes",
+        "--yes",
     ]
-    assert t06.label.startswith("[cuda:any]")
+    assert t06.label.startswith("[cuda:2]") and t06.env["RLEBENCH_GPU"] == "2"
     _, (t01,), _ = _run(["task01/L1/01-open-fridge", "-a", "oracle"], monkeypatch)
     assert "-m" not in t01.argv and "--resume-trajectory" not in t01.argv
     assert t01.env["RLEBENCH_GPU"] == "0"  # default device when a target wants one
@@ -245,7 +270,7 @@ def test_open_book_retries_and_subscription_env(monkeypatch):
         ["task08", "-a", "cc", "-e", "anthropic/claude-code", "-m", "anthropic/claude-opus-5", "--open-book"],
         monkeypatch, CLAUDE_CODE_OAUTH_TOKEN="t", ANTHROPIC_API_KEY="stale", HOME="/nonexistent-e1f0",
     )
-    assert "--ak" not in inv.argv
+    assert inv.argv[inv.argv.index("--ak") + 1] == "disable_web_search=false"
     assert inv.argv[inv.argv.index("--max-retries") + 1:][:3] == ["2", "--retry-include", "ApiRateLimitError"]
     assert inv.env.get("CLAUDE_FORCE_OAUTH") == "1" and "ANTHROPIC_API_KEY" not in inv.env
     _, (inv,), _ = _run(["task08", "-a", "cc", "-m", "anthropic/test-model", "--max-retries", "0"], monkeypatch, ANTHROPIC_API_KEY="k")
@@ -263,8 +288,16 @@ def test_double_dash_only_for_run():
         cli.main(["list", "--", "--x"])
 
 
-def test_families_have_a_lane():
-    assert {f.run_cfg.get("lane") for f in families().values()} == {"agent-host", "environment-host"}
+def test_gpu_tasks_pin_their_card_in_compose():
+    """Harbor reserves GPUs by count only and defers to a compose reservation on
+    `main`; every GPU phase pins the card rlebench placed it on."""
+    for task_toml in REPO.glob("tasks/**/task.toml"):
+        config = read_task_toml(task_toml)
+        for phase, env in (("environment", config.get("environment", {})),
+                           ("tests", config.get("verifier", {}).get("environment", {}))):
+            if env.get("gpus", 0):
+                compose = (task_toml.parent / phase / "docker-compose.yaml").read_text()
+                assert "device_ids: ['${RLEBENCH_GPU:-0}']" in compose, f"{task_toml.parent}/{phase}"
 
 
 def test_clean_removes_only_the_selected_job_dirs(tmp_path, monkeypatch, capsys):
@@ -356,8 +389,9 @@ def test_agy_default_web_control(monkeypatch, open_book):
         monkeypatch, GEMINI_API_KEY='test-key',
     )
     argv = invocations[0].argv
-    assert argv[argv.index('-a') + 1] == 'rlebench.agents.antigravity:GeminiApiAntigravityCli'
-    assert ('disable_web_tools=true' in argv) == (not open_book)
+    assert argv[argv.index('-a') + 1] == 'rlebench.agents.antigravity:ClosedBookAntigravityCli'
+    assert ('disable_web_search=true' in argv) == (not open_book)
+    assert ('disable_web_search=false' in argv) == open_book
 
 
 @pytest.mark.parametrize('open_book', [False, True])
@@ -384,14 +418,14 @@ def test_agy_gemini_api(monkeypatch, model, open_book):
         GOOGLE_APPLICATION_CREDENTIALS='/unused/credentials',
     )
     inv = invocations[0]
-    assert inv.argv[inv.argv.index('-a') + 1] == 'rlebench.agents.antigravity:GeminiApiAntigravityCli'
-    assert inv.argv[inv.argv.index('-m') + 1] == 'google/gemini-3.7-flash'
+    assert inv.argv[inv.argv.index('-a') + 1] == 'rlebench.agents.antigravity:ClosedBookAntigravityCli'
+    assert inv.argv[inv.argv.index('-m') + 1] == 'gemini/gemini-3.7-flash'
     assert inv.env['GEMINI_API_KEY'] == 'test-gemini-secret'
     assert 'test-gemini-secret' not in inv.display()
     for key in ['AGY_FORCE_AUTH_JSON', 'AGY_AUTH_JSON_PATH', 'GOOGLE_API_KEY',
                 'GOOGLE_GEMINI_BASE_URL', 'GOOGLE_GENAI_USE_VERTEXAI', 'GOOGLE_APPLICATION_CREDENTIALS']:
         assert key not in inv.env
-    assert ('disable_web_tools=true' in inv.argv) == (not open_book)
+    assert ('disable_web_search=true' in inv.argv) == (not open_book)
     assert 'reasoning_effort=high' in inv.argv
     for host in ['generativelanguage.googleapis.com', 'antigravity.google',
                  'antigravity-cli-auto-updater-974169037036.us-central1.run.app',

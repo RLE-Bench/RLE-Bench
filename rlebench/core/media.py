@@ -44,33 +44,6 @@ def media_dir(default: str = DEFAULT_DIR) -> Path:
     return Path(os.environ.get("RLEBENCH_MEDIA_DIR", default))
 
 
-def hand_over(root) -> None:
-    """Give a finished media tree to whoever owns the directory it sits in.
-
-    A verifier renders as root into a bind mount owned by the host user, so the
-    tree lands root-owned on the HOST -- where Harbor cannot archive it (renaming
-    a directory needs write on the directory itself, unlike the files beside it)
-    and a completely successful trial dies at EACCES. See harness.debug.match_owner
-    for the same handover on the debug and artifact trees.
-
-    Best-effort, and a no-op when the parent is already ours: on the host, and for
-    the daemon's own private recording tree, there is nobody to hand anything to.
-    """
-    root = Path(root)
-    try:
-        ref = root.parent.stat()
-        if ref.st_uid == os.geteuid():
-            return
-    except OSError:
-        return
-    for path in (root, *root.rglob("*")):
-        try:
-            os.chown(path, ref.st_uid, ref.st_gid)
-            os.chmod(path, 0o755 if path.is_dir() else 0o644)
-        except OSError:
-            pass
-
-
 def ffmpeg_exe() -> str | None:
     """The ffmpeg binary: the CLI on PATH, else the one imageio-ffmpeg bundles."""
     exe = shutil.which("ffmpeg")
@@ -440,7 +413,6 @@ class Media:
         for name in listed:
             shutil.copy2(src / name, dest / name)
         shutil.copy2(index, dest / "index.json")
-        hand_over(dest)
         return listed
 
     def close(self) -> dict:
@@ -452,7 +424,6 @@ class Media:
                 self.root.mkdir(parents=True, exist_ok=True)
                 with open(self.root / "index.json", "w") as f:
                     json.dump(index, f, indent=2)
-                hand_over(self.root)
             except Exception as exc:  # noqa: BLE001
                 index["index_error"] = str(exc)
         return index

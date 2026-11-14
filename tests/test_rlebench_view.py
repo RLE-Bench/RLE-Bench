@@ -69,7 +69,6 @@ def jobs(tmp_path):
     (t / "steps" / "develop" / "verifier").mkdir(parents=True)
     (t / "steps" / "evaluate" / "verifier" / "media").mkdir(parents=True)
     (t / "steps" / "evaluate" / "agent").mkdir()
-    (t / "debug" / "episodes").mkdir(parents=True)
     (t / "config.json").write_text("{}")
     (t / "result.json").write_text(json.dumps({
         "task_name": "rlebench/multi", "agent_info": {"name": "codex", "version": "1", "model_info": {"name": "m"}},
@@ -82,7 +81,6 @@ def jobs(tmp_path):
     (t / "steps" / "evaluate" / "verifier" / "media" / "trial000.mp4").write_bytes(b"clip")
     (t / "steps" / "evaluate" / "verifier" / "media" / "index.json").write_text(json.dumps({"files": ["trial000.mp4"], "skipped": []}))
     (t / "steps" / "evaluate" / "agent" / "trajectory.json").write_text(json.dumps({"steps": [{"step_id": 1, "source": "agent", "message": "hi"}]}))
-    (t / "debug" / "episodes" / "evaluation_ep0000.mp4").write_bytes(b"dbg")
     (root / "notes").mkdir()                                          # a stray dir is not a job
     return root
 
@@ -112,14 +110,12 @@ def test_multi_step_trials_default_to_the_scored_step(client):
     assert (t["steps"], t["step"], t["reward"]) == (["develop", "evaluate"], "evaluate", 0.4)
     assert t["step_rewards"] == {"develop": 0.0, "evaluate": 0.4}
     assert t["media_index"]["files"] == ["trial000.mp4"] and t["trajectory"] is True
-    assert t["debug_episode_files"] == ["evaluation_ep0000.mp4"]
     dev = client.get("/api/jobs/multi/trials/multi__ccc?step=develop").json()
     assert (dev["step"], dev["reward"], dev["media_index"], dev["trajectory"]) == ("develop", 0.0, None, False)
     assert client.get("/api/jobs/multi/trials/multi__ccc/verifier-output?step=develop").json()["stdout"] == "develop out\n"
     assert client.get("/api/jobs/multi/trials/multi__ccc/verifier-output").json()["stdout"] == "evaluate out\n"
     assert client.get("/api/jobs/multi/trials/multi__ccc/media/trial000.mp4").content == b"clip"
-    assert client.get("/api/jobs/multi/trials/multi__ccc/debug/evaluation_ep0000.mp4").content == b"dbg"
-    for bad in ("?step=nope", "/media/trial000.mp4?step=develop", "/debug/..%2F..%2Fresult.json"):
+    for bad in ("?step=nope", "/media/trial000.mp4?step=develop", "/media/..%2F..%2Fresult.json"):
         assert client.get("/api/jobs/multi/trials/multi__ccc" + bad).status_code == 404, bad
 
 

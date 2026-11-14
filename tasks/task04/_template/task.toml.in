@@ -28,6 +28,10 @@ MOTIONTRACK_MOTION = "/workspace/assets/motions/@@MOTION@@.npz"
 
 [agent]
 timeout_sec = 14400.0
+# The agent runs with the model API only; the hosts its CLI installs from stay
+# with the environment.
+network_mode = "allowlist"
+allowed_hosts = []
 
 [verifier]
 timeout_sec = 3600.0

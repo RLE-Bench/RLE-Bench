@@ -23,6 +23,9 @@ services:
       # ckpt.pt, and the run takes the ordinary replay path.
       NANOVLA_RESUME_DIR: /resume
     volumes:
+      # harbor copies the reward out with docker cp, which reads volumes, not tmpfs
+      - type: volume
+        target: /logs/verifier
       - type: bind
         source: ${NANOVLA_RESUME_DIR:-./empty}
         target: /resume

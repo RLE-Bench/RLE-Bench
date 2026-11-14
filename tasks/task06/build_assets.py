@@ -114,6 +114,10 @@ network_mode = "no-network"
 [agent]
 timeout_sec = {agent_timeout}.0
 user = "agent"
+# The agent runs with the model API only; the hosts its CLI installs from stay
+# with the environment.
+network_mode = "allowlist"
+allowed_hosts = []
 
 [verifier]
 timeout_sec = 1800.0
@@ -135,11 +139,10 @@ start_interval_sec = 1.0
 retries = 60
 """
 
-GPU_COMPOSE = """# GPU passthrough for GPU-enabled task06 agent containers (1x NVIDIA GPU).
-# Harbor's Docker backend appends this to its own compose templates; the
-# service name must stay `main`. Requires nvidia-container-toolkit on the
-# host. The GPU is exposed for model training and optional agent-side compute;
-# the root-owned rendering service remains pinned to OSMesa.
+GPU_COMPOSE = """# The GPU of a GPU-enabled task06 agent container. Harbor reserves GPUs by count
+# only and defers to this reservation, which pins the card (`rlebench run
+# --device`). The GPU serves training and agent-side compute; the root-owned
+# rendering service remains pinned to OSMesa.
 services:
   main:
     environment:
@@ -149,7 +152,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ['${RLEBENCH_GPU:-0}']
               capabilities: [gpu]
 """
 
@@ -181,9 +184,9 @@ COPY entrypoint.sh /opt/task06-entrypoint.sh
 RUN chown -R root:root /opt/private \\
     && chmod 700 /opt/private \\
     && chmod 755 /opt/task06-entrypoint.sh \\
-    && mkdir -p /run/rlebench /logs/artifacts \\
+    && mkdir -p /run/rlebench \\
     && chmod 755 /run/rlebench \\
-    && chown -R ${{AGENT_USER}}:${{AGENT_USER}} /workspace /logs/artifacts
+    && chown -R ${{AGENT_USER}}:${{AGENT_USER}} /workspace
 
 WORKDIR /workspace
 ENTRYPOINT ["/opt/task06-entrypoint.sh"]
@@ -252,8 +255,10 @@ mkdir -p /logs/verifier
 # Lock the verifier context BEFORE any submitted code can run: sandboxed
 # estimators execute as uid 65534 and must not be able to read the scoring
 # code, thresholds, or evaluation seeds (deterministic rendering would let
-# readable seeds reconstruct ground truth).
+# readable seeds reconstruct ground truth), nor write the reward Harbor
+# leaves world-writable.
 chmod -R o-rwx,g-rwx /tests || true
+chown 0:0 /logs/verifier && chmod 0755 /logs/verifier || exit 1
 
 export PYTHONPATH=/tests
 python3 /tests/score_task.py
@@ -574,7 +579,6 @@ def _readme(v: str, cfg: dict) -> str:
     deliverable = "`model.pt` (TorchScript)" if v == "c" else "`estimator.py`"
     gate = ("the TorchScript module loads within the 20M-element limit"
             if v == "c" else "the estimator loads and returns a pose")
-    gpu_note = " --override-gpus 0" if cfg["gpu"] else ""
     return f"""# Task 06 / {cfg["name"]}: {cfg["title"]}
 
 Estimate the planar pose of an unlabeled T, C or F block from a fixed camera
@@ -592,8 +596,8 @@ the gate is that {gate}.
 
 ~~~bash
 make task06-assets
-harbor run -p tasks/task06/{cfg["name"]} -a oracle{gpu_note}
-harbor run -p tasks/task06/{cfg["name"]} -a <agent> -m <model>{gpu_note}
+harbor run -p tasks/task06/{cfg["name"]} -a oracle
+rlebench run task06/{cfg["name"]} -a <agent> -m <model>  # adds the agent's install hosts
 ~~~
 """
 

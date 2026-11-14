@@ -1,8 +1,7 @@
-# GPU passthrough for GPU-enabled task06 agent containers (1x NVIDIA GPU).
-# Harbor's Docker backend appends this to its own compose templates; the
-# service name must stay `main`. Requires nvidia-container-toolkit on the
-# host. The GPU is exposed for model training and optional agent-side compute;
-# the root-owned rendering service remains pinned to OSMesa.
+# The GPU of a GPU-enabled task06 agent container. Harbor reserves GPUs by count
+# only and defers to this reservation, which pins the card (`rlebench run
+# --device`). The GPU serves training and agent-side compute; the root-owned
+# rendering service remains pinned to OSMesa.
 services:
   main:
     environment:
@@ -12,5 +11,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ['${RLEBENCH_GPU:-0}']
               capabilities: [gpu]

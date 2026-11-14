@@ -11,5 +11,3 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /workspace
 COPY assets/ /workspace/
-
-RUN mkdir -p /logs/artifacts

@@ -23,6 +23,10 @@ network_mode = "no-network"
 
 [agent]
 timeout_sec = 10800.0
+# The agent runs with the model API only; the hosts its CLI installs from stay
+# with the environment.
+network_mode = "allowlist"
+allowed_hosts = []
 
 [verifier]
 timeout_sec = 3600.0

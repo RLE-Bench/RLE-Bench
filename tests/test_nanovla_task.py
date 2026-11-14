@@ -54,7 +54,7 @@ def test_family_manifest_uses_rlebench_subtasks_layout():
     with (TASKS / "manifest.toml").open("rb") as stream:
         family = tomllib.load(stream)
     assert family["task"]["layout"] == "subtasks"
-    assert family["run"] == {"lane": "agent-host", "gpu": True}
+    assert family["run"] == {"gpu": True}
     assert family["prepare"]["commands"] == [
         ["make", "sim-libero"], ["make", "sim-robotwin"], ["make", "task05"], ["make", "task05-data"],
     ]
@@ -164,6 +164,12 @@ def test_compose_mounts_exact_assets_and_isolates_the_evaluator(subtask: str):
     assert "/logs/artifacts:rw,size=2m,mode=0755" in verifier
     assert "/logs/nanovla-handoff:rw,size=2m,mode=0700" in verifier
     assert "nanovla-eval" not in verifier
+    # harbor's docker cp reaches the reward only on a volume
+    assert "- type: volume\n        target: /logs/verifier\n" in verifier
+    assert "/logs/verifier:" not in verifier
+    # harbor leaves /logs/verifier world-writable; root takes it back before scoring
+    test_sh = (TASKS / subtask / "tests" / "test.sh").read_text()
+    assert test_sh.index("chmod 0755 /logs/verifier") < test_sh.index("score_task.py")
 
 
 @pytest.mark.parametrize("subtask", sorted(SUBTASKS))
@@ -381,7 +387,7 @@ def test_robotwin_success_checks_need_no_expert_state():
 
 
 def test_the_rollout_never_resumes_from_rows_the_agent_could_have_planted():
-    """/logs/verifier is the trial's directory and the agent phase mounts it rw."""
+    """Rows already under /logs/verifier were not written by this verifier."""
     source = (HARNESS / "verifier" / "common.py").read_text()
     body = source[source.index("def run_rollout("):]
     body = body[:body.index("\ndef ")]

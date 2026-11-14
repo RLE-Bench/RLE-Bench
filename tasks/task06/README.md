@@ -86,7 +86,7 @@ By hand:
 
 ```bash
 harbor run -p tasks/task06/rgb-only -a oracle
-harbor run -p tasks/task06/rgb-depth-model-training -a oracle --override-gpus 0
+RLEBENCH_GPU=1 harbor run -p tasks/task06/rgb-depth-model-training -a oracle  # card 0 by default
 ```
 
 `verifier/report.json` carries the per-group scores and medians;

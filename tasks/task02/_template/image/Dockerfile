@@ -26,11 +26,11 @@ COPY payload_agent /opt/rlebench
 COPY payload_private /opt/private
 COPY entrypoint.sh control.sh verify.sh healthcheck.sh check_isolation.py /opt/
 RUN chmod 755 /opt/*.sh \
-    && mkdir -p /var/lib/rlebench /run/rlebench /workspace/agent_harness /logs/artifacts /opt/private/media \
+    && mkdir -p /var/lib/rlebench /run/rlebench /workspace/agent_harness /opt/private/media \
     && chown -R root:root /opt/private /opt/src /var/lib/rlebench \
     && chmod 700 /opt/private /opt/src /var/lib/rlebench \
     && chmod 755 /run/rlebench \
-    && chown -R agent:agent /workspace /logs/artifacts \
+    && chown -R agent:agent /workspace \
     && chmod -R a+rX /opt/rlebench \
     && if [ -d /opt/perception ]; then chmod 700 /opt/perception; fi \
     && if [ -f /opt/private/HARNESS_MANUAL.md ]; then cp /opt/private/HARNESS_MANUAL.md /opt/HARNESS_MANUAL.md; fi \

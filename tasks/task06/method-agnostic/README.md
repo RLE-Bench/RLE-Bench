@@ -15,6 +15,6 @@ the gate is that the estimator loads and returns a pose.
 
 ~~~bash
 make task06-assets
-harbor run -p tasks/task06/method-agnostic -a oracle --override-gpus 0
-harbor run -p tasks/task06/method-agnostic -a <agent> -m <model> --override-gpus 0
+harbor run -p tasks/task06/method-agnostic -a oracle
+rlebench run task06/method-agnostic -a <agent> -m <model>  # adds the agent's install hosts
 ~~~

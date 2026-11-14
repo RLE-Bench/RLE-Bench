@@ -1,8 +1,6 @@
-# Compose overlay Harbor layers over its own templates. Harbor's local Docker
-# provider cannot allocate GPUs, so the device comes from this reservation:
-# `gpus = 1` in task.toml stays as the portable declaration, and local runs pass
-# `--override-gpus 0`. Nothing is mounted: the dataset and the robot are baked
-# into the image.
+# Compose overlay Harbor layers over its own templates. Harbor reserves GPUs by
+# count only and defers to this reservation, which pins the card. Nothing is
+# mounted: the dataset and the robot are baked into the image.
 services:
   main:
     deploy:

@@ -33,9 +33,9 @@ COPY entrypoint.sh /opt/task06-entrypoint.sh
 RUN chown -R root:root /opt/private \
     && chmod 700 /opt/private \
     && chmod 755 /opt/task06-entrypoint.sh \
-    && mkdir -p /run/rlebench /logs/artifacts \
+    && mkdir -p /run/rlebench \
     && chmod 755 /run/rlebench \
-    && chown -R ${AGENT_USER}:${AGENT_USER} /workspace /logs/artifacts
+    && chown -R ${AGENT_USER}:${AGENT_USER} /workspace
 
 WORKDIR /workspace
 ENTRYPOINT ["/opt/task06-entrypoint.sh"]

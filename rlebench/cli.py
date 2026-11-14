@@ -17,7 +17,7 @@ A target is a family (task01: every cell), a level or group (task01/L1,
 task02/06-setting-the-table) or one cell (task01/L1/01-open-fridge). `-a` is
 the scaffold, `-m <provider>/<model_name>` the model, and `-e <vendor>/<lane>`
 the endpoint and credentials (`rlebench run --help` lists them). rlebench adds what harbor
-cannot know: the family's egress lane, `--override-gpus 0` for GPU tasks,
+cannot know: the agent's install and API hosts,
 `--resume-trajectory` where supported, the closed-book switch, the dataset
 mount and the device placement (`--device cpu | cuda:N ...`). Anything after `--`
 reaches harbor verbatim.
@@ -93,7 +93,7 @@ def build_run(args: argparse.Namespace, extra: list[str]) -> tuple[list[Target],
     fams = families()
     targets = [t for name in args.task for t in resolve(name)]
     devices = runner.parse_devices(args.device, targets)
-    placements, workers = runner.place(targets, fams, devices, args.jobs)
+    placements, workers = runner.place(targets, devices, args.jobs)
     opts = runner.RunOptions(
         jobs_dir=args.jobs_dir, open_book=args.open_book, resume=not args.no_resume,
         force_build=args.force_build, max_retries=args.max_retries, extra=extra,

@@ -15,5 +15,4 @@ paths = [
 ]
 
 [run]
-lane = "environment-host"
 gpu = false

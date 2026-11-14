@@ -86,14 +86,6 @@ def step_root(trial_dir: Path, step: str | None) -> Path | None:
     return root if root.is_dir() else None
 
 
-def debug_episodes(trial_dir: Path) -> list[str]:
-    """Recordings an operator's RLEBENCH_DEBUG run left under debug/episodes/."""
-    root = trial_dir / "debug" / "episodes"
-    if not root.is_dir():
-        return []
-    return sorted(p.name for p in root.iterdir() if p.is_file() and p.suffix in (".mp4", ".webm"))
-
-
 # ---------------------------------------------------------------------------
 # summaries
 # ---------------------------------------------------------------------------
@@ -125,7 +117,6 @@ def trial_summary(trial_dir: Path, step: str | None = None) -> dict:
         "step": step,
         "step_rewards": {n: (read_json(trial_dir / "steps" / n / "verifier" / "reward.json") or {}).get("reward")
                          for n in names},
-        "debug_episodes": len(debug_episodes(trial_dir)),
     }
 
 
@@ -194,7 +185,6 @@ def trial_detail(trial_dir: Path, step: str | None = None) -> dict:
         media_index=read_json(root / "verifier" / "media" / "index.json"),
         files=list_files(trial_dir),
         stdout_lines=n_lines,
-        debug_episode_files=debug_episodes(trial_dir),
     )
     return detail
 

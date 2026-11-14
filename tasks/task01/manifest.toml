@@ -20,6 +20,5 @@ images = [
 paths = ["tasks/task01/L1", "third_party/robocasa/robocasa/models/assets/ROBOCASA_ASSET_VERSION"]
 
 [run]
-lane = "agent-host"
 gpu = true
 requires_env = ["ROBOCASA_ASSET_DIR"]
