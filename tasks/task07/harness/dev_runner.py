@@ -36,6 +36,7 @@ def main():
         if policy.dead or log.policy_faults:
             print(policy.stderr_tail(), file=sys.stderr)
     print(json.dumps(log.metrics(args.budget), indent=2, default=str))
+    return 1 if log.aborted == "policy_startup" else 0
 
 
 if __name__ == "__main__":

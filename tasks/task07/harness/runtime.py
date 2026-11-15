@@ -246,7 +246,7 @@ class EpisodeLog:
     ticks: int = 0
     policy_faults: int = 0
     fault_reasons: list = field(default_factory=list)
-    aborted: str | None = None      # "sim_unstable" | "wall_budget" | None
+    aborted: str | None = None      # sim_unstable, wall_budget, policy_startup
     digest: str = ""
     final_positions: np.ndarray | None = None
 
@@ -374,6 +374,11 @@ def run_episode(policy, seed: int, budget_t: float = spec.EPISODE_T,
         cell_spec["bin_hit_force_n"] = config.BIN_HIT_FORCE_N
     policy_wall_start = _policy_wall_s(policy)
     policy.reset(cell_spec, 0 if policy_seed is None else int(policy_seed))
+    if getattr(policy, "dead", None) is not None:
+        log.aborted = "policy_startup"
+        log.policy_faults = 1
+        log.fault_reasons.append(f"policy reset failed: {policy.dead}")
+        return log
 
     rig = sensor.CameraRig(model) if render else None
     view = _open_view(video, model, video_mode, video_camera, video_size)
@@ -405,7 +410,9 @@ def run_episode(policy, seed: int, budget_t: float = spec.EPISODE_T,
                 "mag_on": 1.0 if held_ctrl[7] >= spec.MAG_ON else 0.0,
                 "t": t,
             }
-            if rig is not None and tick % spec.FRAME_EVERY_TICKS == 0:
+            if (rig is not None
+                    and getattr(policy, "dead", None) is None
+                    and tick % spec.FRAME_EVERY_TICKS == 0):
                 obs.update(sensor.frame_obs(rig, model, data, seed,
                                             frame_idx))
                 frame_idx += 1

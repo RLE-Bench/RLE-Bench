@@ -2,9 +2,9 @@
 
 One shape for every family: `harbor run -p <path> [-i <instance>] -a <agent>
 [-m <model>] -o <jobs>/<target>/<agent> --job-name <model>` plus what harbor
-cannot know about a task -- its egress lane, GPU override, resume support,
-closed-book switch and dataset mount -- read from the family manifest and the
-target's task.toml.
+cannot know about a task -- the agent's install and API hosts, resume support,
+closed-book switch, dataset mount and GPU card -- read from the family manifest
+and the target's task.toml.
 """
 
 from __future__ import annotations
@@ -37,10 +37,14 @@ def _env(base: dict[str, str]) -> dict[str, str]:
     return env
 
 
+def _task_environment(target: Target) -> dict:
+    task_dir = REPO / target.path / (target.instance or "")
+    return read_task_toml(task_dir / "task.toml").get("environment", {})
+
+
 def task_gpus(target: Target) -> int:
     """`[environment] gpus` of the target's task.toml (0 when absent)."""
-    task_dir = REPO / target.path / (target.instance or "")
-    return int(read_task_toml(task_dir / "task.toml").get("environment", {}).get("gpus") or 0)
+    return int(_task_environment(target).get("gpus") or 0)
 
 
 def task_requests_gpu(target: Target) -> bool:
@@ -69,11 +73,9 @@ class RunOptions:
 
 
 # --- devices ----------------------------------------------------------------------
-# `--device cpu` or `--device cuda:N ...`. The compose overlays own GPU attachment, so a
-# device is an env var per cell, never a harbor flag; the manifest's
-# `[run] gpu_env` names which one the family's overlay reads:
-#   slot (default)  RLEBENCH_GPU=<id>            task01/02/03/04
-#   any             the overlay says `count: N`; Docker picks   task06
+# `--device cpu` or `--device cuda:N ...`. Harbor reserves GPUs by count only and
+# defers to a compose device reservation, so each GPU family's overlay pins
+# `device_ids: ['${RLEBENCH_GPU}']` and a device is an env var per cell.
 
 
 @dataclass
@@ -102,27 +104,20 @@ def parse_devices(values: list[str] | None, targets: list[Target]) -> list[str] 
     return ids
 
 
-def place(targets: list[Target], families: dict[str, Family], devices: list[str] | None,
-          cpu_jobs: int) -> tuple[list[Placement], int]:
+def place(targets: list[Target], devices: list[str] | None, cpu_jobs: int) -> tuple[list[Placement], int]:
     """Per-target device env plus the worker count."""
     if devices is None:
         return [Placement({}, "cpu") for _ in targets], cpu_jobs
     out: list[Placement] = []
     slot = 0
-    workers = len(devices)
     for target in targets:
-        fam = families[target.name.split("/")[0]]
-        need = task_gpus(target)
-        kind = fam.run_cfg.get("gpu_env", "slot")
-        if need == 0:
+        if task_gpus(target) == 0:
             out.append(Placement({}, "cpu"))
-        elif kind == "any":
-            out.append(Placement({}, "cuda:any"))
-        else:
-            gpu = devices[slot % len(devices)]
-            slot += 1
-            out.append(Placement({"RLEBENCH_GPU": gpu}, f"cuda:{gpu}"))
-    return out, workers
+            continue
+        gpu = devices[slot % len(devices)]
+        slot += 1
+        out.append(Placement({"RLEBENCH_GPU": gpu}, f"cuda:{gpu}"))
+    return out, len(devices)
 
 
 # --- one cell -------------------------------------------------------------------
@@ -131,7 +126,6 @@ def place(targets: list[Target], families: dict[str, Family], devices: list[str]
 def build(target: Target, family: Family, resolved: Resolved, opts: RunOptions,
           placement: Placement, *, log_to_file: bool) -> Invocation:
     run_cfg = family.run_cfg
-    lane = run_cfg.get("lane", "environment-host")
     slug = model_slug(resolved.model)
     out_dir = f"{opts.jobs_dir}/{target.name}/{resolved.agent_dir}"
 
@@ -147,12 +141,13 @@ def build(target: Target, family: Family, resolved: Resolved, opts: RunOptions,
     if retries is not None:
         argv += ["--max-retries", str(retries), "--retry-include", "ApiRateLimitError"]
 
-    if lane == "agent-host":
-        for host in resolved.api_hosts:
-            argv += ["--allow-agent-host", host]
-    else:
-        hosts = resolved.setup_hosts + [h for h in resolved.api_hosts if h not in resolved.setup_hosts]
-        for host in hosts:
+    # The agent phase is the task's `[agent]` allowlist plus the model API. A
+    # restricted environment also needs the hosts the agent installs from; a public
+    # one ignores them.
+    for host in resolved.api_hosts:
+        argv += ["--allow-agent-host", host]
+    if _task_environment(target).get("network_mode", "public") != "public":
+        for host in resolved.setup_hosts + [h for h in resolved.api_hosts if h not in resolved.setup_hosts]:
             argv += ["--allow-environment-host", host]
     for value in resolved.agent_envs:
         argv += ["--agent-env", value]
@@ -161,9 +156,7 @@ def build(target: Target, family: Family, resolved: Resolved, opts: RunOptions,
     for value in resolved.open_book if opts.open_book else resolved.closed_book:
         argv += ["--ak", value]
 
-    if task_requests_gpu(target):
-        # harbor's Docker backend rejects any `gpus > 0`; the compose overlay attaches the device
-        argv += ["--override-gpus", "0", "--yes"]
+    argv += ["--yes"]  # a task.toml `${VAR}` env would otherwise prompt on stdin
     if run_cfg.get("resume_trajectory") and opts.resume and resolved.agent != "oracle":
         argv += ["--resume-trajectory"]
     if opts.force_build:
@@ -172,8 +165,6 @@ def build(target: Target, family: Family, resolved: Resolved, opts: RunOptions,
 
     env = _env(resolved.subprocess_env())
     env.update(placement.env)
-    if lane == "agent-host":
-        env["RLEBENCH_DEBUG"] = "1"  # live debug tree next to the job (see the compose overlay)
     return Invocation(
         argv, env,
         label=f"[{placement.label}] {target.name} -> {out_dir}/{slug}/",

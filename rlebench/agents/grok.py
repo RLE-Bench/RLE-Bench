@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 import uuid
 from pathlib import Path, PurePosixPath
@@ -17,14 +18,14 @@ from harbor.utils.env import parse_bool_env_value
 class ResumingGrokBuild(GrokBuild):
     """Upstream Grok Build with per-step grok sessions.
 
-    Harbor 0.21's adapter pins one `--session-id` for the whole trial, but grok
+    Harbor's adapter pins one `--session-id` for the whole trial, but grok
     takes that flag only for a session that does not exist yet, so every step
     after the first fails with "Session ID ... is already in use". A later step
     instead reopens the pinned session with `--resume <id>` when the trial
     resumes its trajectory, and otherwise opens a fresh session of its own.
     """
 
-    SUPPORTS_RESUME = True
+    capabilities = GrokBuild.capabilities.model_copy(update={"resume": True})
 
     _session_opened = False
 
@@ -49,13 +50,12 @@ class SubscriptionGrokBuild(ResumingGrokBuild):
 
     _REMOTE_SECRETS_DIR = PurePosixPath("/tmp/grok-build-secrets")
 
-    def _auth_json_path(self) -> Path:
-        explicit = self._get_env("GROK_AUTH_JSON_PATH")
+    @staticmethod
+    def _find_auth_json(get) -> Path:
+        explicit = get("GROK_AUTH_JSON_PATH")
         if explicit:
             path = Path(explicit)
-        elif parse_bool_env_value(
-            self._get_env("GROK_FORCE_AUTH_JSON"), name="GROK_FORCE_AUTH_JSON", default=False
-        ):
+        elif parse_bool_env_value(get("GROK_FORCE_AUTH_JSON"), name="GROK_FORCE_AUTH_JSON", default=False):
             path = Path.home() / ".grok" / "auth.json"
         else:
             raise ValueError(
@@ -66,14 +66,28 @@ class SubscriptionGrokBuild(ResumingGrokBuild):
             raise ValueError(f"grok auth.json not found: {path}")
         return path
 
+    def _auth_json_path(self) -> Path:
+        return self._find_auth_json(self._get_env)
+
+    @classmethod
+    def check_model_credentials(cls, connection, *, kwargs, env, explicit_env=None):
+        """The login session stands in for XAI_API_KEY."""
+        cls._find_auth_json(env.get)
+
     async def _install_auth(self, environment: BaseEnvironment) -> None:
         secrets_dir = self._REMOTE_SECRETS_DIR.as_posix()
         remote = (self._REMOTE_SECRETS_DIR / "auth.json").as_posix()
-        await self.exec_as_agent(environment, command=f"mkdir -p {secrets_dir}")
+        # upload_file lands as root, and the image may set USER without an
+        # [agent] user, so take the owner from the agent's own shell.
+        result = await self.exec_as_agent(
+            environment,
+            command=f'mkdir -p {secrets_dir} && printf "\\nGROK_RUNTIME_ID %s:%s\\n" "$(id -u)" "$(id -g)"',
+        )
+        owner = re.search(r"^GROK_RUNTIME_ID (\d+:\d+)$", result.stdout or "", re.MULTILINE)
+        if owner is None:
+            raise RuntimeError("could not resolve the agent uid/gid for auth.json")
         await environment.upload_file(self._auth_json_path(), remote)
-        if environment.default_user is not None:
-            owner = shlex.quote(str(environment.default_user))
-            await self.exec_as_root(environment, command=f"chown {owner} {remote} && chmod 600 {remote}")
+        await self.exec_as_root(environment, command=f"chown {owner[1]} {remote} && chmod 600 {remote}")
         await self.exec_as_agent(
             environment, command=f'mkdir -p "$HOME/.grok" && ln -sf {remote} "$HOME/.grok/auth.json"'
         )

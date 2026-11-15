@@ -13,6 +13,9 @@ services:
     environment:
       NVIDIA_DRIVER_CAPABILITIES: compute,graphics,utility
     volumes:
+      # harbor copies the reward out with docker cp, which reads volumes, not tmpfs
+      - type: volume
+        target: /logs/verifier
       - type: bind
         source: ${NANOVLA_SHARDS_L10:?set NANOVLA_SHARDS_L10}
         target: /assets/nanovla/shards

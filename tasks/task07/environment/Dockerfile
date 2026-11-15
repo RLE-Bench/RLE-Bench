@@ -22,5 +22,3 @@ ENV RLEBENCH_ASSETS=/workspace/assets
 
 WORKDIR /workspace
 COPY assets/ /workspace/
-
-RUN mkdir -p /logs/artifacts

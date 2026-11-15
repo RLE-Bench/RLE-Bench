@@ -52,7 +52,7 @@ def main():
 from pathlib import Path
 import imageio_ffmpeg
 root = Path('/logs/verifier')
-owner = root.stat().st_uid or pwd.getpwnam('agent').pw_uid
+owner = pwd.getpwnam('agent').pw_uid
 for path in (root / 'media').glob('*'):
     assert path.stat().st_uid == owner, path
     if path.suffix != '.mp4': continue

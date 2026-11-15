@@ -77,14 +77,7 @@ tasks-clean: $(addsuffix -clean,$(FAMILIES))
 task-assets: $(addsuffix -assets,$(FAMILIES))
 
 # The agent's uid inside the container. Never 0: the metering guarantee is uid-based.
-# 1000 keeps images portable; RLEBENCH_DEBUG=1 bakes in YOUR uid so the agent's
-# 0600 session trace is readable while a run is still going.
-RLEBENCH_DEBUG ?= 0
-ifeq ($(RLEBENCH_DEBUG),0)
 AGENT_UID ?= 1000
-else
-AGENT_UID ?= $(shell u=$$(id -u); if [ "$$u" -eq 0 ]; then echo 1000; else echo $$u; fi)
-endif
 export AGENT_UID
 
 task01-assets:

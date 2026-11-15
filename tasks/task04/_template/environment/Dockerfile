@@ -66,4 +66,3 @@ ENV PYTHONPATH=/workspace
 ENV MOTIONTRACK_ROBOT_DIR=/workspace/assets/unitree_g1
 ENV MOTIONTRACK_DATASET=/workspace/assets/lafan1
 
-RUN mkdir -p /logs/artifacts

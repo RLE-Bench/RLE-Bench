@@ -15,136 +15,86 @@ import pytest
 
 from harbor.models.agent.context import AgentContext
 
-from rlebench.agents.antigravity import (
-    GeminiApiAntigravityCli,
-    ClosedBookAntigravityCli,
-)
+from rlebench.agents.antigravity import ClosedBookAntigravityCli
+
+_KEY = {"GEMINI_API_KEY": "test-key"}
 
 
-def test_gemini_api_provider_settings(tmp_path):
-    agent = GeminiApiAntigravityCli(
-        logs_dir=tmp_path, model_name='google/gemini-3.7-flash',
-        reasoning_effort='high', disable_web_tools=True,
-    )
-    config, alias = agent._build_settings_config('gemini-3.7-flash')
-    assert config['modelProvider'] == 'gemini'
-    assert config['modelConfigs']['defaultModel'] == alias
-    assert agent._disable_web_tools
+@pytest.fixture(autouse=True)
+def _no_host_credentials(monkeypatch):
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GEMINI_BASE_URL", "AGY_ADC_AUTH"):
+        monkeypatch.delenv(name, raising=False)
 
 
-def _agent(tmp_path: Path) -> GeminiApiAntigravityCli:
-    return GeminiApiAntigravityCli(
-        logs_dir=tmp_path,
-        model_name="google/gemini-3.7-flash",
-        reasoning_effort="high",
-        extra_env={
-            "GEMINI_API_KEY": "test-key",
-            "GOOGLE_GEMINI_BASE_URL": "https://gemini.example.test",
-            "GOOGLE_GENAI_API_VERSION": "v1beta",
-        },
+def _agent(tmp_path: Path, **kwargs: Any) -> ClosedBookAntigravityCli:
+    kwargs.setdefault("extra_env", dict(_KEY))
+    return ClosedBookAntigravityCli(
+        logs_dir=tmp_path / "logs", model_name="gemini/gemini-3.7-flash", **kwargs
     )
 
 
-def test_antigravity_uses_harbor_owned_phase_timeout(
-    tmp_path: Path,
-) -> None:
-    agent = _agent(tmp_path)
+def _record(agent: ClosedBookAntigravityCli) -> list[tuple[str, dict[str, str] | None]]:
     calls: list[tuple[str, dict[str, str] | None]] = []
 
-    async def record_exec(
-        environment: Any,
-        *,
-        command: str,
-        env: dict[str, str] | None = None,
-        **kwargs: Any,
-    ) -> None:
+    async def record_exec(environment: Any, *, command: str, env=None, **kwargs: Any):
         calls.append((command, env))
+        return SimpleNamespace(return_code=0, stdout="", stderr="")
 
     agent.exec_as_agent = record_exec  # type: ignore[method-assign]
+    return calls
+
+
+def _agy_runs(calls) -> list[tuple[str, dict[str, str] | None]]:
+    return [(c, env) for c, env in calls if "/agy --dangerously-skip-permissions" in c]
+
+
+@pytest.mark.parametrize("extra_env, provider", [(_KEY, "gemini"), ({}, None)])
+def test_api_key_selects_gemini_provider(tmp_path, extra_env, provider):
+    config = _agent(tmp_path, extra_env=extra_env)._build_settings_config("gemini-3.7-flash")
+    assert config.get("modelProvider") == provider
+
+
+def test_run_command_and_env(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, reasoning_effort="high")
+    calls = _record(agent)
     asyncio.run(agent.run("finish the task", object(), AgentContext()))
 
-    command, env = next(
-        (command, env)
-        for command, env in calls
-        if "/agy --dangerously-skip-permissions" in command
-    )
-    assert "--print-timeout 24h" in command
+    [(command, env)] = _agy_runs(calls)
+    assert "--print-timeout 24h" in command and "--continue" not in command
     assert "--model gemini-3.7-flash" in command
     assert "--effort high" in command
     assert "--prompt='finish the task'" in command
-    assert env is not None
-    assert env["GEMINI_API_KEY"] == "test-key"
     assert env == {"GEMINI_API_KEY": "test-key", "GEMINI_CLI_TRUST_WORKSPACE": "true"}
 
 
-def test_antigravity_resume_keeps_long_print_timeout(
-    tmp_path: Path,
-) -> None:
+def test_resume_continues_the_conversation(tmp_path: Path) -> None:
+    assert ClosedBookAntigravityCli.capabilities.resume
     agent = _agent(tmp_path)
-    commands: list[str] = []
-
-    async def record_exec(
-        environment: Any,
-        *,
-        command: str,
-        **kwargs: Any,
-    ) -> None:
-        commands.append(command)
-
-    agent.exec_as_agent = record_exec  # type: ignore[method-assign]
+    calls = _record(agent)
+    asyncio.run(agent.run("develop", object(), AgentContext()))
     asyncio.run(agent.resume("evaluate", object(), AgentContext()))
 
-    command = next(
-        command
-        for command in commands
-        if "/agy --dangerously-skip-permissions" in command
-    )
-    assert "--continue" in command
-    assert "--print-timeout 24h" in command
+    first, second = (c for c, _ in _agy_runs(calls))
+    assert "--continue" not in first
+    assert "--continue" in second and "--print-timeout 24h" in second
+    assert "evaluate" in second and not agent._resume
 
 
-def test_base_adapter_does_not_force_api_key_provider(tmp_path: Path) -> None:
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path,
-        model_name="google/gemini-3.7-flash",
-        reasoning_effort="high",
-    )
-
-    config, _ = agent._build_settings_config("gemini-3.7-flash")
-
-    assert config is not None
-    assert "modelProvider" not in config
-
-
-def test_api_install_run_and_resume_ignore_oauth(tmp_path):
-    agent = GeminiApiAntigravityCli(
-        logs_dir=tmp_path, model_name="google/gemini-3.7-flash",
-        extra_env={"AGY_AUTH_JSON_PATH": str(tmp_path / "missing-token"),
-                   "AGY_FORCE_AUTH_JSON": "1", "GEMINI_API_KEY": "test-key"},
-    )
-    commands = []
-
-    async def record_exec(environment, *, command, **kwargs):
-        commands.append(command)
-
-    async def dependencies(*args, **kwargs):
-        pass
-
-    agent.exec_as_agent = record_exec
-    agent.ensure_system_dependencies = dependencies
-    environment = object()
-    asyncio.run(agent.install(environment))
-    asyncio.run(agent.run("develop", environment, AgentContext()))
-    asyncio.run(agent.resume("evaluate", environment, AgentContext()))
-    assert not agent._seeded_token
-    assert not any("oauth" in c for c in commands)
-    runs = [c for c in commands if "/agy --dangerously" in c]
-    assert len(runs) == 2
-    assert all("--effort" not in c for c in runs)
+@pytest.mark.parametrize("explicit, policy, expected", [
+    ({}, True, True), ({}, False, False),
+    ({"disable_web_search": False}, True, False), ({"disable_web_search": True}, False, True),
+])
+def test_network_policy_drives_web_switch(tmp_path, explicit, policy, expected):
+    agent = _agent(tmp_path, **explicit)
+    asyncio.run(agent.set_web_tools_disabled(policy, object()))
+    assert agent.options.disable_web_search is expected
 
 
 class LocalEnvironment:
     """Exercise Harbor's real execution/error wrapper in an isolated home."""
+
+    _NOOP = ("/agy --dangerously-skip-permissions", "agy models", ".antigravity-run-start",
+             "antigravity-cli/brain")
 
     def __init__(self, home: Path, fail: str | None = None):
         self.home = home
@@ -156,7 +106,7 @@ class LocalEnvironment:
         assert user is None  # Harbor must retain the environment's agent user.
         if self.fail and self.fail in command:
             return SimpleNamespace(return_code=1, stdout="", stderr="injected failure")
-        if '/agy --dangerously-skip-permissions' in command or command.startswith('set -o pipefail; src='):
+        if any(marker in command for marker in self._NOOP):
             return SimpleNamespace(return_code=0, stdout="", stderr="")
         result = subprocess.run(
             ['bash', '-c', command], capture_output=True, text=True,
@@ -167,9 +117,7 @@ class LocalEnvironment:
 
 @pytest.mark.parametrize('original', [None, '{"existing":{"enabled":false}}\n', '{broken'])
 def test_hook_lifecycle(tmp_path, original):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     path = tmp_path / '.gemini/config/hooks.json'
     path.parent.mkdir(parents=True)
     if original is not None:
@@ -196,9 +144,7 @@ def test_hook_lifecycle(tmp_path, original):
 
 @pytest.mark.parametrize('disable', [True, False])
 def test_web_control_and_cleanup(tmp_path, disable):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=disable,
-    )
+    agent = _agent(tmp_path, disable_web_search=disable)
     environment = LocalEnvironment(tmp_path)
     asyncio.run(agent.run('test', environment, AgentContext()))
     assert any(agent._build_web_hook_command() in c for c in environment.calls) == disable
@@ -208,9 +154,7 @@ def test_web_control_and_cleanup(tmp_path, disable):
 
 @pytest.mark.parametrize('failure', ['d.update', 'settings.json', '/agy --dangerously'])
 def test_failure_cleans_hooks(tmp_path, failure):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     path = tmp_path / '.gemini/config/hooks.json'
     path.parent.mkdir(parents=True)
     path.write_text('{"existing":{}}\n')
@@ -223,9 +167,7 @@ def test_failure_cleans_hooks(tmp_path, failure):
 
 
 def test_cancellation_restores_hook(tmp_path):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     environment = LocalEnvironment(tmp_path)
     execute = environment.exec
 
@@ -241,18 +183,14 @@ def test_cancellation_restores_hook(tmp_path):
 
 
 def test_cleanup_failure_is_reported(tmp_path):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     environment = LocalEnvironment(tmp_path, fail='shutil.rmtree')
     with pytest.raises(RuntimeError):
         asyncio.run(agent.run('test', environment, AgentContext()))
 
 
 def test_partial_hook_install_preserves_original(tmp_path):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     path = tmp_path / '.gemini/config/hooks.json'
     path.parent.mkdir(parents=True)
     path.write_text('{"existing":{}}\n')
@@ -265,9 +203,7 @@ def test_partial_hook_install_preserves_original(tmp_path):
 
 
 def test_cleanup_error_preserves_original_failure(tmp_path):
-    agent = ClosedBookAntigravityCli(
-        logs_dir=tmp_path / 'logs', model_name='google/gemini-3.7-flash', disable_web_tools=True,
-    )
+    agent = _agent(tmp_path, disable_web_search=True)
     environment = LocalEnvironment(tmp_path, fail='shutil.rmtree')
     execute = environment.exec
 

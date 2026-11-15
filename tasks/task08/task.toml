@@ -1,5 +1,4 @@
 schema_version = "1.4"
-artifacts = ["/logs/artifacts"]
 
 [task]
 name = "rlebench/task08-mobile-manipulator-from-scratch"
@@ -24,6 +23,10 @@ network_mode = "no-network"
 
 [agent]
 timeout_sec = 7200.0
+# The agent runs with the model API only; the hosts its CLI installs from stay
+# with the environment.
+network_mode = "allowlist"
+allowed_hosts = []
 
 [verifier]
 timeout_sec = 5400.0

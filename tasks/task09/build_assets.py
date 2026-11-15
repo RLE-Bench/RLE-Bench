@@ -1,7 +1,6 @@
 """Stage the three task09 GELLO payloads for one Harbor task."""
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -13,18 +12,13 @@ sys.path.insert(0, REPO)
 
 from rlebench import taskgen  # noqa: E402
 
-from harness.variants import VARIANTS  # noqa: E402
+from harness.public_package import write_package  # noqa: E402
 
 HARNESS_SRC = os.path.join(REPO, "tasks", "task09", "harness")
 CODESIGN_MODELS = os.path.join(HARNESS_SRC, "assets", "gello_codesign")
 VARIANT_NAMES = ("franka", "ur5e", "xarm7")
 
-AGENT_FILES = ("__init__.py", "torques.py", "probe_protocol.py")
-AGENT_RENAMES = {
-    "balance_codesign_public.py": "balance.py",
-    "scenarios_public.py": "scenarios.py",
-}
-VERIFIER_EXCLUDE = ("*_public.py", "assets")
+VERIFIER_EXCLUDE = ("assets",)
 
 FORBIDDEN_IN_AGENT = (
     "oracle", "golden", "HIDDEN_SEEDS", "lead_sref", "checkpoint",
@@ -34,37 +28,6 @@ FORBIDDEN_IN_AGENT = (
     "check_validity", "density_report", "link_mass_tol", "payload_max",
     "probe_noise_std", "DENSITY_PRINTED", "DENSITY_ANY",
 )
-
-
-def _public_spec(name: str) -> str:
-    variant = VARIANTS[name]
-    geometry = json.load(open(os.path.join(HARNESS_SRC, "lead_geometry.json")))[name]
-    return f'''\
-"""Public constants for the {variant.follower_name} GELLO co-design."""
-VARIANT_NAME = {variant.name!r}
-FOLLOWER_NAME = {variant.follower_name!r}
-FOLLOWER_CHAIN = {variant.follower_chain!r}
-FOLLOWER_EE = {variant.follower_ee!r}
-N_JOINTS = {variant.n_joints}
-LEAD_HOME = {variant.home!r}
-WORKSPACE_HALFWIDTH = {variant.workspace_halfwidth!r}
-SERVO_TAU_NM = 0.35
-SERVO_KP = 8.0
-SERVO_KD = 0.4
-JOINT_DAMPING = 0.01
-JOINT_FRICTIONLOSS = 0.03
-JOINT_ARMATURE = 0.002
-SERVO_MASS_KG = 0.018
-LEAD_CHAIN = {geometry['chain']!r}
-LEAD_EE = {geometry['ee']!r}
-LEAD_BASE_QUAT = {geometry['base_quat']!r}
-STOCK_BODY_MASS = {geometry['stock_mass']!r}
-MASS_BUDGET_KG = 2.30
-TIMESTEP = 0.002
-GRAVITY = (0.0, 0.0, -9.81)
-JOINT_NAMES = tuple(f"lead_joint{{i}}" for i in range(1, N_JOINTS + 1))
-EE_SITE = "lead_ee_site"
-'''
 
 
 def _assert_public_boundary(root: str) -> None:
@@ -96,17 +59,7 @@ def build_environment_assets() -> None:
         with open(os.path.join(workdir, "scene.xml"), "w", encoding="utf-8") as stream:
             stream.write(scene)
 
-        package = os.path.join(workdir, "harness")
-        os.makedirs(package)
-        for filename in AGENT_FILES:
-            shutil.copy(os.path.join(HARNESS_SRC, filename),
-                        os.path.join(package, filename))
-        for source_name, destination_name in AGENT_RENAMES.items():
-            shutil.copy(os.path.join(HARNESS_SRC, source_name),
-                        os.path.join(package, destination_name))
-        with open(os.path.join(package, "spec.py"), "w",
-                  encoding="utf-8") as stream:
-            stream.write(_public_spec(name))
+        write_package(os.path.join(workdir, "harness"), name)
         _assert_public_boundary(workdir)
         print(f"{name} workspace built ({_du(workdir)} KB)")
 

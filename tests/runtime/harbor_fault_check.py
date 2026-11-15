@@ -49,7 +49,7 @@ PY
     log_path = root / "reports/harbor-faults.log"
     with log_path.open("w") as log:
         run = subprocess.Popen(["harbor", "run", "-p", str(cell), "-a", "oracle",
-             "--override-gpus", "0", "--yes", "--jobs-dir", str(root/"jobs"),
+             "--yes", "--jobs-dir", str(root/"jobs"),
              "--job-name", name], env=env, stdout=log, stderr=subprocess.STDOUT)
         injected = set()
         deadline = time.monotonic()+360

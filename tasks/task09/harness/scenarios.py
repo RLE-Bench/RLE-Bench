@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
+from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import mujoco
 import numpy as np
@@ -18,6 +20,47 @@ from . import spec as gspec
 
 HOME = np.asarray(gspec.LEAD_HOME)
 HW = np.asarray(gspec.WORKSPACE_HALFWIDTH)
+_DIR_ATTRS = ("assetdir", "meshdir", "texturedir")
+_FILE_ATTRS = ("file", "fileright", "fileleft", "fileup", "filedown",
+               "filefront", "fileback")
+
+
+def validate_model_xml(lead_xml_path: str) -> ET.Element:
+    """Reject symlinks, <include>, entities, and paths outside lead.xml's dir."""
+    xml_path = Path(lead_xml_path)
+    if xml_path.is_symlink():
+        raise ValueError("lead.xml must not be a symbolic link")
+    raw = xml_path.read_bytes()
+    upper = raw.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise ValueError("DOCTYPE and ENTITY declarations are not allowed")
+    root = ET.fromstring(raw)
+    if root.find(".//include") is not None:
+        raise ValueError("include elements are not allowed in lead.xml")
+    base = xml_path.resolve().parent
+    prefixes = [""]
+    for compiler in root.findall("compiler"):
+        for attr in _DIR_ATTRS:
+            val = compiler.get(attr)
+            if not val:
+                continue
+            p = Path(val)
+            if (p.is_absolute() or ".." in p.parts
+                    or not (base / p).resolve().is_relative_to(base)):
+                raise ValueError(f"invalid compiler {attr}: {val}")
+            prefixes.append(val)
+    for elem in root.iter():
+        for attr in _FILE_ATTRS:
+            val = elem.get(attr)
+            if not val:
+                continue
+            p = Path(val)
+            if p.is_absolute() or ".." in p.parts:
+                raise ValueError(f"invalid asset path in {elem.tag}[@{attr}]: {val}")
+            for prefix in prefixes:
+                if not (base / prefix / p).resolve().is_relative_to(base):
+                    raise ValueError(f"asset path escapes model directory: {val}")
+    return root
 
 
 @dataclass
@@ -35,6 +78,7 @@ def compose_lead(lead_xml_path: str, seed: int = 0,
                  env: GelloEnvelope | None = None, perturb: bool = True):
     """Submitted model -> pinned, optionally mass-perturbed (model, data)."""
     env = env or GelloEnvelope()
+    validate_model_xml(lead_xml_path)
     spec = mujoco.MjSpec.from_file(lead_xml_path)
     for lst in (spec.actuators, spec.equalities, spec.tendons, spec.keys,
                 getattr(spec, "plugins", [])):

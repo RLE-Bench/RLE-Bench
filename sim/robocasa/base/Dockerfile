@@ -109,7 +109,7 @@ ENV ROBOCASA_ASSET_VERSION=${ROBOCASA_ASSET_VERSION}
 #     EGL on an H100 (JIT on)           12.7 ms   -> 78.6 steps/s
 # ~20x. Under EGL, 1->3 cameras costs almost nothing (10.5 -> 12.7 ms) because
 # rasterization moves off the CPU and per-step cost collapses back onto physics.
-# Requires GPU access at run time (Harbor: [environment] gpus).
+# Requires GPU access at run time (the task's compose overlay pins the card).
 ENV MUJOCO_GL=egl
 
 # EGL needs TWO things the container does not get by default, and without either one

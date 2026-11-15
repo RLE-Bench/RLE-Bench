@@ -3,7 +3,7 @@
 @@README_SUMMARY@@
 
 ```bash
-harbor run -p tasks/task05/@@SLUG@@ -a oracle --override-gpus 0 --yes
+harbor run -p tasks/task05/@@SLUG@@ -a oracle
 ```
 
 @@README_ASSETS@@

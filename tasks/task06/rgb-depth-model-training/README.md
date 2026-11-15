@@ -15,6 +15,6 @@ the gate is that the TorchScript module loads within the 20M-element limit.
 
 ~~~bash
 make task06-assets
-harbor run -p tasks/task06/rgb-depth-model-training -a oracle --override-gpus 0
-harbor run -p tasks/task06/rgb-depth-model-training -a <agent> -m <model> --override-gpus 0
+harbor run -p tasks/task06/rgb-depth-model-training -a oracle
+rlebench run task06/rgb-depth-model-training -a <agent> -m <model>  # adds the agent's install hosts
 ~~~

@@ -85,10 +85,11 @@ rlebench run task08 -a <agent> -m <model>
 rlebench run task08 -a oracle            # reference design + controller
 ```
 
-By hand:
+By hand, the Oracle needs no network; other agents need the hosts they install
+from, which `rlebench run --dry-run` prints:
 
 ```bash
-harbor run -p tasks/task08 -a <agent> -m <model>
+harbor run -p tasks/task08 -a oracle
 ```
 
 `verifier/report.json` carries the per-arm reports, the limiting arm and the

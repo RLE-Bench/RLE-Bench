@@ -15,9 +15,6 @@ paths = [
 ]
 
 [run]
-lane = "environment-host"
 # rgb-depth-model-training and method-agnostic declare gpus = 1; the other two
-# subtasks are CPU-only. Their overlays reserve `count: 1`, so Docker picks the
-# card: `-d` sets concurrency only.
+# subtasks are CPU-only.
 gpu = true
-gpu_env = "any"

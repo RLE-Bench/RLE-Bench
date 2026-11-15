@@ -2,9 +2,9 @@
 
 `rlebench run -a <scaffold> -m <provider>/<model_name> -e <vendor>/<lane>`:
 the scaffold is the CLI Harbor drives; the config selects its endpoint and
-credentials. A recipe is one (agent, config) pair. Task-side extras (GPU override, resume, egress
-lane, the closed-book switch) are not here -- runner.build adds them from the
-family manifest and the target's task.toml.
+credentials. A recipe is one (agent, config) pair. Task-side extras (resume, which
+egress hosts apply, the closed-book switch) are not here -- runner.build adds them
+from the family manifest and the target's task.toml.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ class Resolved:
     config: str = ""
     harbor_model: str = ""  # endpoint-specific spelling when Harbor needs a bare model
     agent_dir: str = ""  # output subdir label (differs from agent for module-path agents)
-    api_hosts: list[str] = field(default_factory=list)  # --allow-agent-host lane
-    setup_hosts: list[str] = field(default_factory=list)  # extra --allow-environment-host lane hosts
+    api_hosts: list[str] = field(default_factory=list)  # model API, open during the agent phase
+    setup_hosts: list[str] = field(default_factory=list)  # agent install, open under a restricted environment
     agent_envs: list[str] = field(default_factory=list)  # repeated --agent-env values, in order
     agent_kwargs: list[str] = field(default_factory=list)  # repeated --ak values (non-closed-book)
     closed_book: list[str] = field(default_factory=list)  # trailing --ak closed-book switch
@@ -80,8 +80,8 @@ _CODEX_SETUP_HOSTS = [
     "nodejs.org",
     "registry.npmjs.org",
 ]
-_CC_CLOSED_BOOK = ["disallowed_tools=WebSearch,WebFetch"]
-_CODEX_CLOSED_BOOK = ["web_search=disabled"]
+# Harbor disables native web tools on a restricted network unless told otherwise.
+_WEB = {"closed_book": ["disable_web_search=true"], "open_book": ["disable_web_search=false"]}
 _ANTIGRAVITY = "rlebench.agents.antigravity"
 _GROK = "rlebench.agents.grok"
 
@@ -95,7 +95,7 @@ def _cc_subscription(model: str, env: dict[str, str]) -> Resolved:
         "claude-code", model,
         api_hosts=["api.anthropic.com"],
         setup_hosts=_CLAUDE_SETUP_HOSTS + ["api.anthropic.com", "statsig.anthropic.com"],
-        closed_book=_CC_CLOSED_BOOK,
+        **_WEB,
         exports={"CLAUDE_FORCE_OAUTH": "1"},
         unsets=["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
         retries_default=2,  # transient 429s kill a whole trial on this lane
@@ -103,16 +103,13 @@ def _cc_subscription(model: str, env: dict[str, str]) -> Resolved:
 
 
 def _cc_api(model: str, env: dict[str, str]) -> Resolved:
-    key = _need_one(env, "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+    _need_one(env, "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
     base = env.get("ANTHROPIC_BASE_URL")
     host = _url_host(base or "https://api.anthropic.com")
     return Resolved(
         "claude-code", model, api_hosts=[host],
         setup_hosts=_CLAUDE_SETUP_HOSTS + ["statsig.anthropic.com"],
-        closed_book=_CC_CLOSED_BOOK,
-        # Harbor maps tokens to API keys; preserve Bearer auth for custom servers.
-        agent_envs=["ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}"]
-        if base and key == "ANTHROPIC_AUTH_TOKEN" else [],
+        **_WEB,
         unsets=[
             "CLAUDE_FORCE_OAUTH", "CLAUDE_CODE_OAUTH_TOKEN",
             "CLAUDE_CODE_USE_BEDROCK", "AWS_BEARER_TOKEN_BEDROCK",
@@ -128,17 +125,13 @@ def _cc_compat(prefix: str, base: str, key_vars: str | tuple[str, ...], cred_var
     def recipe(model: str, env: dict[str, str]) -> Resolved:
         key = _need_one(env, *key_vars)
         model = model.removeprefix(f"{prefix}/")
-        settings = {
-            "ANTHROPIC_BASE_URL": base,
-            "ANTHROPIC_DEFAULT_FABLE_MODEL": model,
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": context_tokens,
-        }
+        settings = {"ANTHROPIC_BASE_URL": base, "CLAUDE_CODE_MAX_CONTEXT_TOKENS": context_tokens}
         return Resolved(
             "claude-code", model, api_hosts=[_url_host(base)],
             setup_hosts=_CLAUDE_SETUP_HOSTS,
             agent_envs=[f"{cred_var}=${{{cred_var}}}", *(f"{k}={v}" for k, v in settings.items())],
             agent_kwargs=["reasoning_effort=high"],
-            closed_book=_CC_CLOSED_BOOK,
+            **_WEB,
             exports={cred_var: env[key], **settings},
             unsets=[
                 v for v in (
@@ -169,8 +162,7 @@ def _codex_api(model: str, env: dict[str, str]) -> Resolved:
     return Resolved(
         "codex", model, api_hosts=[host],
         setup_hosts=_CODEX_SETUP_HOSTS + extra,
-        closed_book=_CODEX_CLOSED_BOOK,
-        exports={"OPENAI_BASE_URL": base} if base else {},
+        **_WEB,
         unsets=["CODEX_FORCE_AUTH_JSON", "CODEX_AUTH_JSON_PATH"],
     )
 
@@ -181,7 +173,7 @@ def _codex_subscription(model: str, env: dict[str, str]) -> Resolved:
     return Resolved(
         "codex", model, api_hosts=["chatgpt.com"],
         setup_hosts=_CODEX_SETUP_HOSTS + ["chatgpt.com", "auth.openai.com"],
-        closed_book=_CODEX_CLOSED_BOOK,
+        **_WEB,
         unsets=["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE"],
     )
 
@@ -190,8 +182,9 @@ def _codex_subscription(model: str, env: dict[str, str]) -> Resolved:
 
 def _agy_api(model: str, env: dict[str, str]) -> Resolved:
     _need_one(env, "GEMINI_API_KEY")
+    # Harbor resolves only the `gemini/` spelling to a bare agy model name.
     return Resolved(
-        f"{_ANTIGRAVITY}:GeminiApiAntigravityCli", model,
+        f"{_ANTIGRAVITY}:ClosedBookAntigravityCli", f"gemini/{model.partition('/')[2]}",
         agent_dir="antigravity-cli",
         api_hosts=["generativelanguage.googleapis.com"],
         setup_hosts=[
@@ -200,7 +193,7 @@ def _agy_api(model: str, env: dict[str, str]) -> Resolved:
             "storage.googleapis.com",
         ],
         agent_kwargs=["reasoning_effort=high"],
-        closed_book=["disable_web_tools=true"],
+        **_WEB,
         unsets=[
             "AGY_AUTH_JSON_PATH", "AGY_FORCE_AUTH_JSON", "GOOGLE_API_KEY",
             "GOOGLE_GEMINI_BASE_URL", "GOOGLE_GENAI_API_VERSION",
@@ -213,7 +206,6 @@ def _agy_api(model: str, env: dict[str, str]) -> Resolved:
 # --- grok-build -----------------------------------------------------------------
 
 _GROK_SETUP_HOSTS = ["deb.debian.org", "x.ai", "storage.googleapis.com"]
-_GROK_WEB = {"closed_book": ["disable_web_search=true"], "open_book": ["disable_web_search=false"]}
 
 
 def _grok_api(model: str, env: dict[str, str]) -> Resolved:
@@ -221,7 +213,7 @@ def _grok_api(model: str, env: dict[str, str]) -> Resolved:
     _need_one(env, "XAI_API_KEY")
     return Resolved(
         f"{_GROK}:ResumingGrokBuild", model, agent_dir="grok-build",
-        api_hosts=["api.x.ai"], setup_hosts=_GROK_SETUP_HOSTS, **_GROK_WEB,
+        api_hosts=["api.x.ai"], setup_hosts=_GROK_SETUP_HOSTS, **_WEB,
     )
 
 
@@ -231,7 +223,7 @@ def _grok_subscription(model: str, env: dict[str, str]) -> Resolved:
     return Resolved(
         f"{_GROK}:SubscriptionGrokBuild", model, agent_dir="grok-build",
         api_hosts=["cli-chat-proxy.grok.com", "auth.x.ai", "accounts.x.ai", "api.x.ai"],
-        setup_hosts=_GROK_SETUP_HOSTS, unsets=["XAI_API_KEY"], **_GROK_WEB,
+        setup_hosts=_GROK_SETUP_HOSTS, unsets=["XAI_API_KEY"], **_WEB,
     )
 
 

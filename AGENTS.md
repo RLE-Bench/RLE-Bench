@@ -156,8 +156,8 @@ family id.
   the real container + verifier path (`harbor run -p tasks/task08 -a oracle`)
 - `rlebench run <target>... -a <agent> -m <model> [-e vendor/lane] [--device cuda:N ...]`
   — evaluate agents; targets are families, levels/groups or single cells, and
-  rlebench adds only the task-side extras harbor cannot know (egress lane,
-  `--override-gpus 0`, resume, closed-book, dataset mount, device placement)
+  rlebench adds only the task-side extras harbor cannot know (the agent's
+  install and API hosts, resume, closed-book, dataset mount, device placement)
 - `rlebench view [jobs]` — browse a jobs tree in the browser: harbor view's
   hierarchy and tabs plus the verifiers' media (`verifier/media/`)
 - `rlebench doctor` / `list` / `prepare <family>` — environment health, the

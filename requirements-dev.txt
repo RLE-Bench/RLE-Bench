@@ -1,6 +1,6 @@
 # Host-side tooling pins. Nothing here is baked into any task image.
 # Harbor is the framework every task.toml targets.
-harbor==0.21.0
+harbor==0.25.0
 # `sim/libero/libero.sh bundles` downloads the encoder bundles with this.
 huggingface-hub==1.31.0
 # `make lint`.

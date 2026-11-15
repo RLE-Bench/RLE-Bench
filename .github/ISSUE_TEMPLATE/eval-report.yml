@@ -13,7 +13,7 @@ body:
     id: versions
     attributes:
       label: harbor version + repo commit
-      placeholder: harbor 0.21.0, rlebench abc1234
+      placeholder: harbor 0.25.0, rlebench abc1234
     validations:
       required: true
   - type: input

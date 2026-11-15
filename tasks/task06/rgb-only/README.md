@@ -16,5 +16,5 @@ the gate is that the estimator loads and returns a pose.
 ~~~bash
 make task06-assets
 harbor run -p tasks/task06/rgb-only -a oracle
-harbor run -p tasks/task06/rgb-only -a <agent> -m <model>
+rlebench run task06/rgb-only -a <agent> -m <model>  # adds the agent's install hosts
 ~~~

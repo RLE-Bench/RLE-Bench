@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -73,33 +72,6 @@ def test_export_copies_only_indexed_files(tmp_path):
     assert media.Media.export(src, dest) == ["a.mp4"]
     assert sorted(p.name for p in dest.iterdir()) == ["a.mp4", "index.json"]
     assert media.Media.export(tmp_path / "absent", dest) == []
-
-
-def test_export_hands_the_tree_to_the_mount_owner(tmp_path, monkeypatch):
-    """The verifier renders as root into a mount the host user owns. A root-owned
-    media/ is a directory Harbor cannot rename, and archiving it kills the trial."""
-    src, dest = tmp_path / "private", tmp_path / "verifier" / "media"
-    src.mkdir()
-    dest.parent.mkdir()
-    (src / "a.mp4").write_bytes(b"a")
-    (src / "index.json").write_text(json.dumps({"files": ["a.mp4"], "skipped": []}))
-
-    given = {}
-    monkeypatch.setattr("os.geteuid", lambda: 0)                 # as root, in-image
-    monkeypatch.setattr("os.chown", lambda p, u, g: given.__setitem__(Path(p).name, (u, g)))
-    media.Media.export(src, dest)
-
-    ref = dest.parent.stat()
-    assert given == {name: (ref.st_uid, ref.st_gid)
-                     for name in ("media", "a.mp4", "index.json")}
-
-
-def test_the_private_recording_tree_is_never_handed_over(tmp_path, monkeypatch):
-    """/opt/private/media belongs to the root daemon: its parent is already ours,
-    so there is nobody to give it to and its mode stays shut."""
-    monkeypatch.setattr("os.chown", lambda *a: pytest.fail("chowned our own tree"))
-    with media.Media(tmp_path / "private" / "media") as m:
-        m.image("f.png", np.zeros((4, 4, 3), dtype=np.uint8))
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")

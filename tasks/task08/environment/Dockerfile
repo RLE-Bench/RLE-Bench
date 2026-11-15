@@ -17,5 +17,3 @@ WORKDIR /workspace
 # Public shelf data and chassis-free stock components only. The agent creates
 # robot.xml from scratch; evaluation code remains in the separate verifier.
 COPY assets/ /workspace/
-
-RUN mkdir -p /logs/artifacts

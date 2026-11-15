@@ -11,6 +11,4 @@ images = ["rlebench-task03-pocket-agent:dev", "rlebench-task03-agent:dev", "rleb
 paths = ["tasks/task03/01-tower-max-height"]
 
 [run]
-lane = "agent-host"
 gpu = true
-resume_trajectory = false

@@ -38,6 +38,10 @@ def _media():
 
 def main():
     try:
+        if os.geteuid() == 0:
+            for directory in ("/tests", VERIFIER_DIR):
+                if os.path.exists(directory) and os.stat(directory).st_mode & 0o077:
+                    raise RuntimeError(f"private verifier directory is not protected: {directory}")
         if os.path.exists(STAGING):
             shutil.rmtree(STAGING)
         source = os.path.join(ARTIFACTS, "policy")
@@ -45,6 +49,7 @@ def main():
             shutil.copytree(source, STAGING, symlinks=True)
         else:
             os.makedirs(STAGING)
+        os.chmod(STAGING, 0o700)
 
         from harness.scorer import score_submission
         media = _media()

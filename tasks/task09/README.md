@@ -100,10 +100,11 @@ rlebench run task09 -a <agent> -m <model>
 rlebench run task09 -a oracle            # reference hardware + software
 ```
 
-By hand:
+By hand, the Oracle needs no network; other agents need the hosts they install
+from, which `rlebench run --dry-run` prints:
 
 ```bash
-harbor run -p tasks/task09 -a <agent> -m <model>
+harbor run -p tasks/task09 -a oracle
 ```
 
 `verifier/report.json` carries the per-variant reports; `verifier/media/`

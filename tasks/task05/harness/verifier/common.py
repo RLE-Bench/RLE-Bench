@@ -468,10 +468,9 @@ def run_rollout(name: str, socket_path: Path, args: list[str], *, timeout_s: flo
     gpus = _override("NANOVLA_ROLLOUT_GPUS", gpus, int)
     timeout_s = _override("NANOVLA_ROLLOUT_TIMEOUT_S", timeout_s, float)
     _reset_dir(Path("/tmp/nanovla-numba"), mode=0o700)
-    # The driver resumes from <name>.jsonl.inc under /logs/verifier. The agent phase
-    # mounts that directory read-write, so anything already there was not written by
-    # this verifier: clear the pair first. A genuine resume point arrives through
-    # RESUME_DIR, a separate read-only mount no agent ever sees.
+    # The driver resumes from <name>.jsonl.inc under /logs/verifier. Anything already
+    # there was not written by this verifier: clear the pair first. A genuine resume
+    # point arrives through RESUME_DIR, a separate read-only mount no agent ever sees.
     VERIFIER_DIR.mkdir(parents=True, exist_ok=True)
     output = VERIFIER_DIR / f"{name}.jsonl"
     target = Path(str(output) + ".inc")

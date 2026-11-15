@@ -160,6 +160,25 @@ def score_submission(submission_dir: str, seeds: dict | None = None,
                       gate={"load": False, "contract": False,
                             "stable": False, "determinism": False})
         return report
+    if smoke1.aborted == "policy_startup":
+        report["smoke"] = [_smoke_diagnostics(smoke1, diag1)]
+        report["errors"].append(f"policy reset failed: {diag1['sandbox_dead']} :: "
+                                f"{diag1['sandbox_stderr_tail'][-500:]}")
+        report.update(reward=0.0, raw_total=0.0, gated=True,
+                      gate={"load": False, "contract": False,
+                            "stable": False, "determinism": False})
+        return report
+    if smoke1.ticks > 0 and smoke1.policy_faults >= smoke1.ticks:
+        report["smoke"] = [_smoke_diagnostics(smoke1, diag1)]
+        detail = diag1["sandbox_dead"] or "faulted on every smoke step"
+        report["errors"].append(f"smoke 0: {detail} :: "
+                                f"{diag1['sandbox_stderr_tail'][-500:]}")
+        report.update(reward=0.0, raw_total=0.0, gated=True,
+                      gate={"load": diag1["sandbox_dead"] is None,
+                            "contract": False,
+                            "stable": smoke1.aborted is None,
+                            "determinism": False})
+        return report
     smoke2, diag2 = _run_sandboxed(
         submission_dir, smoke_seed, config.SMOKE_T,
         wall_budget_s=spec.EPISODE_WALL_BUDGET_S)

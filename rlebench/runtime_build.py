@@ -214,13 +214,8 @@ exec /opt/verify.sh "${RLEBENCH_STEP:-attempt}"
     steps = steps_for(family, count)
     for name, _ in steps:
         step = destination / "steps" / name
-        (step / "workdir").mkdir(parents=True)
+        step.mkdir(parents=True)
         (step / "instruction.md").write_text(instruction(family, name, task, level))
-        (step / "workdir/setup.sh").write_text('''#!/bin/sh
-rm -f /logs/verifier/reward.json /logs/verifier/diagnosis.json 2>/dev/null || true
-rm -f /workspace/setup.sh
-exit 0
-''')
         solution = step / "solution"
         solution.mkdir()
         code = ('sim.reset(); sim.step([0.]*12, ObsSpec(cameras=())); sim.end_development()'

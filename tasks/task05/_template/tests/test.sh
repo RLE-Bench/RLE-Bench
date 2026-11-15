@@ -1,6 +1,8 @@
 #!/bin/bash
 set -u
 mkdir -p /logs/verifier
+# harbor leaves it world-writable; the submission's uids must not write here
+chown 0:0 /logs/verifier && chmod 0755 /logs/verifier || exit 1
 export PYTHONPATH=/opt/nanovla-verifier
 python3 /tests/score_task.py
 status=$?

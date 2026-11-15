@@ -19,9 +19,8 @@ from .store import read_state
 
 def export_files(output, directory, paths, index=None):
     agent = pwd.getpwnam("agent")
-    owner = output.stat()
-    uid, gid = (owner.st_uid, owner.st_gid) if owner.st_uid else (agent.pw_uid, agent.pw_gid)
-    # Extract as the host owner; never follow agent-controlled output paths as root.
+    uid, gid = agent.pw_uid, agent.pw_gid
+    # Extract as the agent; never follow agent-controlled output paths as root.
     script = ('import os,sys,tarfile; os.umask(0o022); os.makedirs(sys.argv[1],exist_ok=True); '
               'tarfile.open(fileobj=sys.stdin.buffer,mode="r|").extractall(sys.argv[1],filter="data")')
     proc = subprocess.Popen(["/usr/local/bin/python", "-I", "-c", script, str(output / directory)],

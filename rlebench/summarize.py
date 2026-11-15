@@ -165,10 +165,9 @@ def _metric(stats: dict, trials: list[dict], key: str) -> float | None:
 
 
 def _status(result: dict, trials: list[dict]) -> str:
-    stats = _object(result.get("stats"))
-    progress = {**_object(result.get("status")), **stats}
-    completed = progress.get("n_completed_trials", progress.get("n_trials", 0)) or 0
-    errors = progress.get("n_errored_trials", progress.get("n_errors", 0)) or 0
+    progress = _object(result.get("stats"))
+    completed = progress.get("n_completed_trials", 0) or 0
+    errors = progress.get("n_errored_trials", 0) or 0
     cancelled = progress.get("n_cancelled_trials", 0) or 0
     total = result.get("n_total_trials") or len(trials)
     if result.get("finished_at"):
