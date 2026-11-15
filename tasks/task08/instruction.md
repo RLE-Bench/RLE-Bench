@@ -76,6 +76,7 @@ chassis geometry reduces design credit rather than invalidating the submission.
 Lower chassis mass, smaller footprint area, and shorter recognized profile
 length receive more credit.
 
+The chassis must be buildable and stable within the whole workspace of the robot arm.
 One chassis member must intersect the center of each `drive_FL`, `drive_FR`,
 `drive_RL`, and `drive_RR` joint. A member passing only near the outside of a
 wheel does not satisfy this structural requirement. The supplied 10 kg battery

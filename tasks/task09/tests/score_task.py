@@ -30,6 +30,12 @@ def _write(reward: dict, report: dict | None = None) -> None:
             json.dump(report, f, indent=2, default=str)
 
 
+def _has_links(root: str) -> bool:
+    return any(os.path.islink(os.path.join(directory, name))
+               for directory, dirs, files in os.walk(root)
+               for name in dirs + files)
+
+
 def _score_variant_process(variant: str, submission: str,
                            output_path: str) -> None:
     """Score one variant in a fresh interpreter bound to its public spec."""
@@ -61,15 +67,18 @@ def main() -> None:
         if os.path.exists(STAGING):
             shutil.rmtree(STAGING)
         os.makedirs(STAGING)
+        os.chmod(STAGING, 0o700)
 
         reports = {}
         reward = {}
         for variant in VARIANTS:
             source = os.path.join(ARTIFACTS, variant)
             submission = os.path.join(STAGING, variant)
-            if os.path.isdir(source):
-                shutil.copytree(source, submission)
-            else:
+            if os.path.isdir(source) and not os.path.islink(source):
+                shutil.copytree(source, submission, symlinks=True)
+                if _has_links(submission):   # root must not follow agent links
+                    shutil.rmtree(submission)
+            if not os.path.isdir(submission):
                 os.makedirs(submission)
 
             output_path = os.path.join(STAGING, f"{variant}-report.json")

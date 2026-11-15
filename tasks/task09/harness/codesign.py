@@ -35,7 +35,7 @@ from .balance import balance_quality, hold_sim, operator_effort
 from .probe_protocol import CHOSEN_POSES, TOTAL_MEASUREMENTS
 from .scenarios import (GelloEnvelope, compose_lead, fixed_hold_configs,
                         hold_configs, sample_workspace, teleop_path,
-                        workspace_grid)
+                        validate_model_xml, workspace_grid)
 
 CAP = gspec.SERVO_TAU_NM
 
@@ -102,6 +102,7 @@ def device_buildable(lead_xml_path: str) -> dict:
     problems: list = []
     checks = 0
     try:
+        validate_model_xml(lead_xml_path)
         model = mujoco.MjModel.from_xml_path(lead_xml_path)
     except Exception as e:
         return dict(ok=False, problems=[f"model does not load: {e}"],

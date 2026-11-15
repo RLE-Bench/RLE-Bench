@@ -298,7 +298,8 @@ def test_sandbox_missing_policy(tmp_path):
     with sandbox.PolicyProcess(str(d)) as p:
         assert p.dead == "policy.py missing"
         log = _short(p, budget_t=1.0)
-    assert log.policy_faults == log.ticks
+    assert log.aborted == "policy_startup"
+    assert log.ticks == 0 and log.policy_faults == 1
 
 
 def test_sandbox_hang_is_killed(tmp_path):

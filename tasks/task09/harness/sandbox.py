@@ -1,104 +1,176 @@
-"""Run the untrusted trim.py in an isolated subprocess and return only plain
-arrays.
+"""Run the untrusted trim.py in a fresh, unprivileged interpreter and return
+only plain arrays.
 
-The scoring process never imports agent Python: module-level code in trim.py
-would otherwise share an interpreter with the scorer. All agent code runs in
-a child that shares no state with the parent and returns pose proposals or feedforward samples; the parent re-clips and re-simulates every torque with its own pristine
-state. A wall-clock timeout bounds runaway code (the job degrades to a
-failure result).
+The child is a new `python -s -P` process (trim_worker.py) that never imports
+the verifier harness. It sees a private copy of the submission, the public
+helper package, and the nominal model as an .mjb file. Under root it drops to
+uid 65534 with no_new_privs, no forks, and CPU/memory/file limits; the whole
+process group is killed when the call ends. Jobs cross the pipe as anonymous
+lists, so instance identities stay in this process.
 """
 from __future__ import annotations
 
-import importlib.util
-import multiprocessing as mp
+import ctypes
+import json
+import math
 import os
+from pathlib import Path
+import select
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import tempfile
+import time
 
+import mujoco
 import numpy as np
 
+from . import spec as gspec
+from . import trim_worker
 from .probe_protocol import CHOSEN_POSES
+from .public_package import write_package
+from .scenarios import compose_lead
 
 DEFAULT_TIMEOUT_S = 120.0
+MAX_REPLY_BYTES = 256 * 1024**2
+PRIVATE_DIRS = ("/tests", "/logs/verifier")
+TRIM_UID = 65534
+_LIBC = ctypes.CDLL(None, use_errno=True)
 
 
-def _load(submission_dir: str, filename: str, modname: str):
-    path = os.path.join(submission_dir, filename)
-    spec = importlib.util.spec_from_file_location(modname, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def _check_private_dirs() -> None:
+    """Fail closed if the verifier runs without its permission boundary."""
+    for directory in PRIVATE_DIRS:
+        if not os.path.isdir(directory) or os.stat(directory).st_mode & 0o077:
+            raise RuntimeError(f"private verifier directory is not protected: {directory}")
 
 
-def _eval_trim_rows(trim, qmat, nv: int) -> np.ndarray:
-    """Sample a trim callable on a query matrix; bad rows degrade to zeros."""
-    rows = []
-    for qq in qmat:
-        try:
-            t = np.asarray(trim(np.asarray(qq, dtype=float).copy()),
-                           dtype=float).reshape(-1)
-            rows.append(t if (t.shape[0] == nv and np.all(np.isfinite(t)))
-                        else np.zeros(nv))
-        except Exception:
-            rows.append(np.zeros(nv))
-    return np.asarray(rows, dtype=float)
-
-
-def _worker(q_out, submission_dir: str, lead_xml: str, jobs: dict) -> None:
-    """jobs["plan_probe"]: {seed: sample, lower, upper} -> 15 proposed poses.
-    jobs["ctrim"]: {key: qmat} sampled on the nominal feedforward.
-    jobs["cadapt"]: {seed: dict(probe=..., qmats={key: qmat})}, adapt() per
-    instance then sample the adapted feedforward; a failing instance
-    degrades to None."""
-    result: dict = {}
+def _reap_trim_uid() -> None:
+    """Kill every uid-65534 process and drop its SysV IPC objects."""
+    pid = os.fork()
+    if pid:
+        os.waitpid(pid, 0)
+        return
     try:
-        from .scenarios import compose_lead
-        mod = _load(submission_dir, "trim.py", "agent_trim")
-        if "plan_probe" in jobs:
-            plans = {}
-            for key, request in jobs["plan_probe"].items():
-                try:
-                    model, _ = compose_lead(lead_xml, seed=0, perturb=False)
-                    sample = tuple(np.asarray(q, dtype=float).copy() for q in request["sample"])
-                    plan = np.asarray(mod.plan_probe(
-                        model, sample, np.asarray(request["lower"]).copy(),
-                        np.asarray(request["upper"]).copy()), dtype=float)
-                    if plan.shape != (CHOSEN_POSES, model.nv) or not np.all(np.isfinite(plan)):
-                        raise ValueError("invalid probe plan shape or values")
-                    plans[key] = dict(configs=plan)
-                except Exception as exc:
-                    plans[key] = dict(error=str(exc))
-            result["plan_probe"] = plans
-        if "ctrim" in jobs:
-            model, _ = compose_lead(lead_xml, seed=0, perturb=False)
-            trim = mod.make_trim(model)
-            result["ctrim"] = {key: _eval_trim_rows(trim, qmat, model.nv)
-                               for key, qmat in jobs["ctrim"].items()}
-        if "cadapt" in jobs:
-            model, _ = compose_lead(lead_xml, seed=0, perturb=False)
-            out = {}
-            for key, spec in jobs["cadapt"].items():
-                try:
-                    probe = [(np.asarray(a, dtype=float),
-                              np.asarray(b, dtype=float))
-                             for a, b in spec["probe"]]
-                    params = mod.adapt(model, probe)
-                    trim2 = mod.make_trim_adapted(model, params)
-                    out[key] = {k: _eval_trim_rows(trim2, qmat, model.nv)
-                                for k, qmat in spec["qmats"].items()}
-                except Exception:
-                    out[key] = None
-            result["cadapt"] = out
-        q_out.put(("ok", result))
-    except Exception as e:  # missing file, un-importable module, etc.
-        q_out.put(("err", repr(e)))
+        os.setgroups([])
+        os.setgid(TRIM_UID)
+        os.setuid(TRIM_UID)
+        os.kill(-1, signal.SIGKILL)
+        for kind, remove in (("shm", lambda i: _LIBC.shmctl(i, 0, None)),
+                             ("msg", lambda i: _LIBC.msgctl(i, 0, None)),
+                             ("sem", lambda i: _LIBC.semctl(i, 0, 0))):
+            try:
+                with open(f"/proc/sysvipc/{kind}") as stream:
+                    header, *rows = [line.split() for line in stream]
+            except FileNotFoundError:
+                continue
+            for row in rows:
+                if int(row[header.index("uid")]) == TRIM_UID:
+                    remove(int(row[1]))
+    finally:
+        os._exit(0)
 
 
-def _context():
-    """fork gives the child a copy-on-write snapshot, so agent code mutating
-    its own module globals cannot reach this process; spawn elsewhere."""
-    try:
-        return mp.get_context("fork")
-    except ValueError:
-        return mp.get_context("spawn")
+def _stage(work: Path, submission_dir: str, lead_xml: str,
+           sandboxed: bool) -> Path:
+    staged = work / "submission"
+    shutil.copytree(submission_dir, staged, symlinks=True)
+    for root, dirs, files in os.walk(staged):
+        if any(os.path.islink(os.path.join(root, name)) for name in dirs + files):
+            raise ValueError("submission must not contain symbolic links")
+    write_package(str(work / "public" / "harness"), gspec.VARIANT_NAME)
+    shutil.copyfile(trim_worker.__file__, work / "worker.py")
+    model, _ = compose_lead(lead_xml, seed=0, perturb=False)
+    mujoco.mj_saveModel(model, str(work / "model.mjb"))
+    os.chmod(work, 0o755)
+    for root, dirs, files in os.walk(work):
+        for name in dirs:
+            os.chmod(os.path.join(root, name), 0o755)
+        for name in files:
+            p = os.path.join(root, name)
+            os.chmod(p, (os.stat(p).st_mode | 0o644) & ~0o022)
+    home = work / "home"
+    home.mkdir(mode=0o700)
+    if sandboxed:
+        os.chown(home, TRIM_UID, TRIM_UID)
+    return home
+
+
+def _request(jobs: dict) -> tuple[dict, dict]:
+    """Strip instance keys: the child gets ordered lists, the parent keeps
+    the order to map results back."""
+    request: dict = {"chosen_poses": CHOSEN_POSES}
+    order: dict = {}
+    if "plan_probe" in jobs:
+        order["plan_probe"] = list(jobs["plan_probe"])
+        request["plan_probe"] = [
+            dict(sample=[np.asarray(q, dtype=float).tolist() for q in job["sample"]],
+                 lower=np.asarray(job["lower"], dtype=float).tolist(),
+                 upper=np.asarray(job["upper"], dtype=float).tolist())
+            for job in jobs["plan_probe"].values()]
+    if "ctrim" in jobs:
+        order["ctrim"] = list(jobs["ctrim"])
+        request["ctrim"] = [np.asarray(q, dtype=float).tolist()
+                            for q in jobs["ctrim"].values()]
+    if "cadapt" in jobs:
+        order["cadapt"] = [(key, list(job["qmats"])) for key, job in jobs["cadapt"].items()]
+        request["cadapt"] = [
+            dict(probe=[[np.asarray(a, dtype=float).tolist(),
+                         np.asarray(b, dtype=float).tolist()] for a, b in job["probe"]],
+                 qmats=[np.asarray(q, dtype=float).tolist() for q in job["qmats"].values()])
+            for job in jobs["cadapt"].values()]
+    return request, order
+
+
+def _restore(result: dict, order: dict) -> dict:
+    out: dict = {}
+    if "plan_probe" in order:
+        out["plan_probe"] = {}
+        for key, plan in zip(order["plan_probe"], result["plan_probe"], strict=True):
+            out["plan_probe"][key] = (
+                {"configs": np.asarray(plan["configs"], dtype=float)}
+                if "configs" in plan else {"error": str(plan.get("error"))})
+    if "ctrim" in order:
+        out["ctrim"] = {key: np.asarray(rows, dtype=float) for key, rows in
+                        zip(order["ctrim"], result["ctrim"], strict=True)}
+    if "cadapt" in order:
+        out["cadapt"] = {}
+        for (key, names), mats in zip(order["cadapt"], result["cadapt"], strict=True):
+            out["cadapt"][key] = None if mats is None else {
+                name: np.asarray(rows, dtype=float)
+                for name, rows in zip(names, mats, strict=True)}
+    return out
+
+
+def _exchange(proc, payload: bytes, timeout: float) -> bytes:
+    outgoing = memoryview(struct.pack(">Q", len(payload)) + payload)
+    incoming = bytearray()
+    expected = None
+    deadline = time.monotonic() + timeout
+    os.set_blocking(proc.stdin.fileno(), False)
+    os.set_blocking(proc.stdout.fileno(), False)
+    while expected is None or len(incoming) < expected:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("trim.py timed out")
+        reads, writes, _ = select.select(
+            [proc.stdout], [proc.stdin] if outgoing else [], [], remaining)
+        if writes:
+            outgoing = outgoing[os.write(proc.stdin.fileno(), outgoing):]
+            if not outgoing:
+                proc.stdin.close()
+        if reads:
+            chunk = os.read(proc.stdout.fileno(), 1 << 20)
+            if not chunk:
+                raise EOFError("trim worker exited")
+            incoming.extend(chunk)
+            if expected is None and len(incoming) >= 8:
+                expected = 8 + struct.unpack(">Q", incoming[:8])[0]
+                if expected > MAX_REPLY_BYTES:
+                    raise ValueError("oversized trim worker reply")
+    return bytes(incoming[8:expected])
 
 
 def run_jobs(submission_dir: str, lead_xml: str | None, jobs: dict,
@@ -107,18 +179,44 @@ def run_jobs(submission_dir: str, lead_xml: str | None, jobs: dict,
     None if the child errored, timed out, or crashed."""
     if not jobs:
         return {}
-    ctx = _context()
-    q_out = ctx.Queue()
-    proc = ctx.Process(target=_worker,
-                       args=(q_out, submission_dir, lead_xml, jobs))
-    proc.start()
+    sandboxed = os.geteuid() == 0
+    if sandboxed:
+        _check_private_dirs()
+    work = Path(tempfile.mkdtemp(prefix="task09-trim-"))
+    proc = None
     try:
-        status, payload = q_out.get(timeout=timeout)
-    except Exception:
-        status, payload = "err", "timeout"
+        try:
+            home = _stage(work, submission_dir, lead_xml, sandboxed)
+        except Exception:
+            return None
+        request, order = _request(jobs)
+        env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(home),
+               "TMPDIR": str(home), "MPLCONFIGDIR": str(home),
+               "PYTHONHASHSEED": "0", "OPENBLAS_NUM_THREADS": "1",
+               "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+               "MUJOCO_GL": "osmesa"}
+        proc = subprocess.Popen(
+            [sys.executable, "-s", "-P", str(work / "worker.py"), str(work),
+             str(math.ceil(timeout))],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, env=env, cwd="/",
+            start_new_session=True)
+        try:
+            raw = _exchange(proc, json.dumps(request).encode(), timeout)
+            reply = json.loads(raw)
+            return _restore(reply["ok"], order) if "ok" in reply else None
+        except Exception:  # timeout, crash, or a malformed reply
+            return None
     finally:
-        proc.join(timeout=1.0)
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=1.0)
-    return payload if status == "ok" else None
+        if proc is not None:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+            if sandboxed:
+                _reap_trim_uid()
+            for stream in (proc.stdin, proc.stdout):
+                if not stream.closed:
+                    stream.close()
+        shutil.rmtree(work, ignore_errors=True)

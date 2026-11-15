@@ -5,7 +5,6 @@ verifier input.
 """
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
 import hashlib
 from pathlib import Path
 
@@ -15,6 +14,7 @@ import numpy as np
 from . import spec as gspec
 from .balance import hold_sim
 from .kinematics import structure_check
+from .scenarios import validate_model_xml
 from rlebench.core.model import check_inertias_valid
 
 SETTLE_SPEED_MAX = 0.1     # rad/s at the end of a 1 s hold: "no blowup"
@@ -48,7 +48,7 @@ def density_report(lead_xml_path: str) -> dict:
     problems, per_geom = [], {}
     worst = 0.0        # worst violation ratio over all geoms (<= 1: fine)
     try:
-        root = ET.parse(lead_xml_path).getroot()
+        root = validate_model_xml(lead_xml_path)
     except Exception as e:
         return dict(ok=False, problems=[f"unparseable XML: {e}"], per_geom={},
                     worst_ratio=float("inf"))
@@ -150,6 +150,7 @@ def check_validity(lead_xml_path: str, compose=None, seed: int = 0) -> dict:
         if compose is not None:
             model, data = compose(lead_xml_path, seed=seed)
         else:
+            validate_model_xml(lead_xml_path)
             model = mujoco.MjModel.from_xml_path(lead_xml_path)
             data = mujoco.MjData(model)
     except Exception as e:

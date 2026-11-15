@@ -26,7 +26,7 @@ from .codesign import (CodesignEnvelope, codesign_battery, compose_instance,
                        probe_bounds)
 from .codesign_checkpoints import aggregate_codesign, evaluate_codesign
 from .sandbox import run_jobs
-from .scenarios import compose_lead
+from .scenarios import compose_lead, validate_model_xml
 from .validity import check_validity
 
 SANDBOX_TIMEOUT_S = 300.0
@@ -70,6 +70,7 @@ def _springs_legal(lead_xml: str) -> float:
     it. 0.0 when the model cannot be read at all.
     """
     try:
+        validate_model_xml(lead_xml)
         model = mujoco.MjModel.from_xml_path(lead_xml)
     except Exception:
         return 0.0
